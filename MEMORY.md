@@ -146,8 +146,86 @@ Bug historique corrigé : le syscall `write` (echo) clobber RAX, ce qui détruis
 
 Affichage au démarrage :
 
-```text
-LumaOS Shell v0.1
-Type 'help' for commands
+```
+---
 
->
+## Phase 5 — Bilan final
+
+**Statut : ✅ Terminé et validé en QEMU**
+
+### Syscalls (int 0x80, vector 128, DPL=3)
+
+| ID | Syscall | Description |
+|---:|---|---|
+| `0` | `write` | Écrit vers la sortie série |
+| `1` | `exit` | Termine le processus courant |
+| `2` | `getpid` | Retourne le PID courant |
+| `3` | `sbrk` | Modifie le break du heap user |
+| `4` | `read` | Lit le buffer clavier (non bloquant) |
+| `5` | `sleep` | Endort le processus N ticks (50 ticks ≈ 1s) |
+| `6` | `yield` | Force un changement de tâche |
+| `7` | `getpages` | Retourne le nombre de pages physiques libres |
+
+- Syscall inconnu → retourne `-1`
+- Tous les syscalls sont validés en QEMU
+
+### Clavier AZERTY FR
+
+- Deux tables de scancodes Set 1 : `scancode_map` (unshifted) et `scancode_shift_map` (shifted)
+- Shift géré via 0x2A/0x36 (make) et 0xAA/0xB6 (break)
+- Caractères non-ASCII (é è ç à ù ²) ignorés sans Shift, digit/équivalent avec Shift
+- Layout AZERTY natif, indépendant de Windows/QEMU
+
+### Shell
+
+- Shell Ring 3 interactif avec prompt `>`
+- Commandes : `help`, `pid`, `mem`, `sleep N`, `exit`
+- Echo caractère par caractère avec backspace
+- Bug RAX/AL clobber corrigé (store avant echo syscall)
+- Validé en QEMU avec clavier AZERTY physique
+
+### Nettoyage mémoire
+
+- `free_user_pages()` libère stack data page + PT page à la terminaison
+- Test de mapping dynamique Phase 4 nettoyé (PD + PT + data page freed)
+- `free pages: before == final` — zéro fuite validée en QEMU
+- Régression Phase 4+5 complète passée
+
+### Commits clés
+
+- `7cee4c2` — AZERTY FR avec Shift + cleanup du test de mapping dynamique
+- `d4a766c` — Suppression des debug [DBG] et serial_putc inutilisé
+- `16e55d4` — Documentation ROADMAP + MEMORY Phase 5
+
+---
+
+## Phase 6 — Architecture prévue (non implémentée)
+
+### Stack filesystem prévu
+
+```
+Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
+```
+
+### Nouveaux fichiers prévus
+
+- `kernel/ata.c` / `kernel/ata.h` — driver ATA/IDE PIO (LBA28, port I/O)
+- `kernel/vfs.c` / `kernel/vfs.h` — abstraction VFS minimale
+- `kernel/fat32.c` / `kernel/fat32.h` — parser FAT32 read-only
+- `kernel/fs_syscall.c` (ou extension de `cpu.c`) — syscalls open/close/read
+
+### QEMU disk image
+
+- QEMU actuellement boot via FAT virtuelle (`fat:rw:$(EFI_ROOT)`)
+- Phase 6 prévoit un disque dur séparé pour la partition FAT32
+- `-drive file=disk.img,format=raw,media=disk,index=1`
+
+### Syscalls prévus
+
+| ID | Syscall | Description |
+|---:|---|---|
+| `8` | `open` | Ouvre un fichier par chemin → fd |
+| `9` | `close` | Ferme un fd |
+| `10` | `read` | Lit depuis un fd (générique, pas seulement clavier) |
+
+Le syscall `read` (ID 4) actuel reste pour le clavier. Le nouveau `read` aura un ID différent ou le read actuel sera généralisé avec un fd.

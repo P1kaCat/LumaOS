@@ -144,15 +144,43 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 ## Phase 6 — Filesystem & Storage
 **Status: ⬜ Not started**
 
-- [ ] Disk driver
-- [ ] VFS
-- [ ] FAT32
-- [ ] File read/write
-- [ ] Directories
-- [ ] Permissions
-- [ ] File descriptors
+### Layered architecture
+```
+Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
+```
+
+### Block device layer
+- [ ] Block device abstraction (`struct block_device`)
+- [ ] ATA/IDE PIO driver (port I/O, LBA28)
+- [ ] Sector read (512 bytes)
+- [ ] Sector read test in QEMU
+
+### VFS layer
+- [ ] Minimal VFS abstraction
+- [ ] File table (per-process file descriptors)
+- [ ] `open()`, `close()`, `read()` VFS operations
+
+### FAT32 layer
+- [ ] FAT32 read-only support
+- [ ] Boot sector / BPB parsing
+- [ ] FAT table walk
+- [ ] Directory entry parsing (8.3 short names)
+- [ ] File lookup by path
+- [ ] Cluster chain read
+
+### Syscalls
+- [ ] `open(path)` → fd
+- [ ] `close(fd)`
+- [ ] `read(fd, buf, len)` → bytes read
+- [ ] Error codes: file not found, bad fd, etc.
+
+### Foundation
+- [ ] Load user program from file (ELF or raw binary)
+- [ ] QEMU disk image with FAT32 partition
 
 ---
+
+
 
 ## Phase 7 — Drivers
 **Status: ⬜ Not started**
