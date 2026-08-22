@@ -28,13 +28,13 @@ static uint64_t pdpt[512] __attribute__((aligned(4096)));
 static uint64_t pd[4][512] __attribute__((aligned(4096)));  /* 4 PDs → 4GB */
 
 void paging_init(void) {
-    pml4[0] = (uint64_t)pdpt | 0x03;  /* present, writable */
+    pml4[0] = (uint64_t)pdpt | 0x07;  /* present, writable */
 
     for (int i = 0; i < 4; i++) {
-        pdpt[i] = (uint64_t)pd[i] | 0x03;
+        pdpt[i] = (uint64_t)pd[i] | 0x07;
         for (int j = 0; j < 512; j++) {
             uint64_t addr = (uint64_t)i * 0x40000000ULL + (uint64_t)j * 0x200000ULL;
-            pd[i][j] = addr | 0x83;  /* present, writable, PS (2MB page) */
+            pd[i][j] = addr | 0x87;  /* present, writable, PS (2MB page) */
         }
     }
 

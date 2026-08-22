@@ -1,46 +1,31 @@
 /*
- * cpu.c — GDT, IDT, PIC setup pour LumaOS (Phase 0C)
+ * cpu.c — GDT (7 entries), IDT (+syscall), TSS, PIC, handlers
  */
 #include "cpu.h"
 #include "sched.h"
 #include <stdint.h>
 
-/* ===== Serial (déclaré dans kernel.c, on redéfinit ici) ===== */
-
 #define COM1 0x3F8
-
-static void serial_putc(char c) {
-    __asm__ volatile ("outb %0, %1" : : "a"(c), "dN"((uint16_t)COM1));
-}
-
-static void serial_puts(const char *s) {
-    while (*s) {
-        if (*s == '\n') serial_putc('\r');
-        serial_putc(*s++);
-    }
-}
-
+static void serial_putc(char c) { __asm__ volatile ("outb %0, %1" : : "a"(c), "dN"((uint16_t)COM1)); }
+static void serial_puts(const char *s) { while (*s) { if (*s == '\n') serial_putc('\r'); serial_putc(*s++); } }
 static char *uitoa(uint64_t n, char *buf) {
-    if (n == 0) { buf[0] = '0'; buf[1] = 0; return buf; }
-    char tmp[32]; int i = 0;
-    while (n > 0) { tmp[i++] = '0' + (n % 10); n /= 10; }
-    int j = 0; while (i > 0) buf[j++] = tmp[--i];
-    buf[j] = 0;
-    return buf;
+    if (n == 0) { buf[0]='0'; buf[1]=0; return buf; }
+    char tmp[32]; int i=0; while (n>0) { tmp[i++]='0'+(n%10); n/=10; }
+    int j=0; while (i>0) buf[j++]=tmp[--i]; buf[j]=0; return buf;
 }
-
 static char *uxtoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
-    char tmp[32]; int i=0; const char *hex="0123456789ABCDEF";
-    while (n) { tmp[i++]=hex[n&0xF]; n>>=4; }
-    int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0;
-    return buf;
+    char tmp[32]; int i=0; const char *h="0123456789ABCDEF";
+    while (n) { tmp[i++]=h[n&0xF]; n>>=4; }
+    int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
 }
 
-/* ===== GDT ===== */
+/* ===== GDT (7 entries: null, kcode, kdata, ucode, udata, TSS low, TSS high) ===== */
 
-static struct gdt_entry gdt[3];
+static struct gdt_entry gdt[7];
 static struct gdt_ptr   gdtr;
+static struct tss       tss;
+static uint64_t tss_stack[2048]; /* 16KB ring-0 stack for ring 3 transitions */
 
 static void gdt_set_entry(int i, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
     gdt[i].limit_low      = limit & 0xFFFF;
@@ -53,8 +38,16 @@ static void gdt_set_entry(int i, uint32_t base, uint32_t limit, uint8_t access, 
 
 void gdt_init(void) {
     gdt_set_entry(0, 0, 0, 0, 0);                            /* Null */
-    gdt_set_entry(1, 0, 0xFFFFF, 0x9A, 0x0A);               /* Code: 64-bit, present, executable */
-    gdt_set_entry(2, 0, 0xFFFFF, 0x92, 0x0C);               /* Data: 64-bit, present, writable */
+    gdt_set_entry(1, 0, 0xFFFFF, 0x9A, 0x0A);               /* Kernel code 64 */
+    gdt_set_entry(2, 0, 0xFFFFF, 0x92, 0x0C);               /* Kernel data */
+    gdt_set_entry(3, 0, 0xFFFFF, 0xFA, 0x0A);               /* User code 64 (DPL=3) */
+    gdt_set_entry(4, 0, 0xFFFFF, 0xF2, 0x0C);               /* User data (DPL=3) */
+
+    /* TSS descriptor (16 bytes = entries 5+6) */
+    uint64_t tss_base = (uint64_t)&tss;
+    uint32_t tss_limit = sizeof(tss) - 1;
+    gdt_set_entry(5, (uint32_t)tss_base, tss_limit, 0x89, 0x00); /* TSS available 64-bit */
+    *(uint64_t *)&gdt[6] = tss_base >> 32;  /* upper 32 bits of base */
 
     gdtr.limit = sizeof(gdt) - 1;
     gdtr.base  = (uint64_t)&gdt;
@@ -74,8 +67,18 @@ void gdt_init(void) {
         "1:\n"
         : : "m"(gdtr) : "rax", "memory"
     );
+    serial_puts("[+] GDT loaded (5 segments + TSS)\n");
+}
 
-    serial_puts("[+] GDT loaded (3 entries)\n");
+void tss_init(void) {
+    /* Zero TSS */
+    for (int i = 0; i < (int)(sizeof(tss)/8); i++) ((uint64_t*)&tss)[i] = 0;
+    tss.rsp0 = (uint64_t)&tss_stack[2048]; /* ring-0 stack top */
+    __asm__ volatile ("ltr %0" : : "r"((uint16_t)0x28));
+    char buf[32];
+    serial_puts("[+] TSS loaded (RSP0=0x");
+    serial_puts(uxtoa(tss.rsp0, buf));
+    serial_puts(")\n");
 }
 
 /* ===== IDT ===== */
@@ -83,7 +86,6 @@ void gdt_init(void) {
 static struct idt_entry idt[IDT_ENTRIES];
 static struct idt_ptr   idtr;
 
-/* Déclarations extern des stubs ASM */
 extern void isr0(void);  extern void isr1(void);  extern void isr2(void);
 extern void isr3(void);  extern void isr4(void);  extern void isr5(void);
 extern void isr6(void);  extern void isr7(void);  extern void isr8(void);
@@ -101,6 +103,7 @@ extern void irq6(void);  extern void irq7(void);  extern void irq8(void);
 extern void irq9(void);  extern void irq10(void); extern void irq11(void);
 extern void irq12(void); extern void irq13(void); extern void irq14(void);
 extern void irq15(void);
+extern void isr128(void); /* syscall gate */
 
 static void idt_set_entry(int i, void *handler, uint8_t flags) {
     uint64_t addr = (uint64_t)handler;
@@ -116,8 +119,6 @@ static void idt_set_entry(int i, void *handler, uint8_t flags) {
 void idt_init(void) {
     idtr.limit = sizeof(idt) - 1;
     idtr.base  = (uint64_t)&idt;
-
-    /* Exceptions CPU (0-31) */
     void (*isr_stubs[32])(void) = {
         isr0, isr1, isr2, isr3, isr4, isr5, isr6, isr7,
         isr8, isr9, isr10, isr11, isr12, isr13, isr14, isr15,
@@ -125,39 +126,32 @@ void idt_init(void) {
         isr24, isr25, isr26, isr27, isr28, isr29, isr30, isr31
     };
     for (int i = 0; i < 32; i++)
-        idt_set_entry(i, isr_stubs[i], 0x8E); /* Present | interrupt gate | ring 0 */
-
-    /* IRQ 0-15 (PIC remappé → 32-47) */
+        idt_set_entry(i, isr_stubs[i], 0x8E);
     void (*irq_stubs[16])(void) = {
         irq0, irq1, irq2, irq3, irq4, irq5, irq6, irq7,
         irq8, irq9, irq10, irq11, irq12, irq13, irq14, irq15
     };
     for (int i = 0; i < 16; i++)
         idt_set_entry(32 + i, irq_stubs[i], 0x8E);
-
+    /* Syscall gate: vector 128, DPL=3 */
+    idt_set_entry(128, isr128, 0xEE);
     __asm__ volatile ("lidt %0" : : "m"(idtr));
-    serial_puts("[+] IDT loaded (256 entries)\n");
+    serial_puts("[+] IDT loaded (256 entries + syscall gate @128 DPL=3)\n");
 }
 
-/* ===== PIC 8259A ===== */
-
+/* ===== PIC ===== */
 void pic_init(void) {
-    /* ICW1 : init, cascade, ICW4 needed */
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x11), "dN"((uint16_t)PIC1_CMD));
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x11), "dN"((uint16_t)PIC2_CMD));
-    /* ICW2 : offset vectors */
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x20), "dN"((uint16_t)PIC1_DATA)); /* IRQ 0-7 → 32-39 */
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x28), "dN"((uint16_t)PIC2_DATA)); /* IRQ 8-15 → 40-47 */
-    /* ICW3 : cascade */
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x20), "dN"((uint16_t)PIC1_DATA));
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x28), "dN"((uint16_t)PIC2_DATA));
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x04), "dN"((uint16_t)PIC1_DATA));
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x02), "dN"((uint16_t)PIC2_DATA));
-    /* ICW4 : 8086 mode */
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x01), "dN"((uint16_t)PIC1_DATA));
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x01), "dN"((uint16_t)PIC2_DATA));
-    /* Masquer tout sauf IRQ1 (clavier) pour l'instant */
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0xFC), "dN"((uint16_t)PIC1_DATA)); /* 11111101 → IRQ1 only */
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0xFF), "dN"((uint16_t)PIC2_DATA)); /* all masked */
-    serial_puts("[+] PIC remapped (IRQ0-15 → vectors 32-47)\n");
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0xFC), "dN"((uint16_t)PIC1_DATA));
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0xFF), "dN"((uint16_t)PIC2_DATA));
+    serial_puts("[+] PIC remapped (IRQ0-15 -> vectors 32-47)\n");
 }
 
 void pic_eoi(uint8_t irq) {
@@ -167,16 +161,15 @@ void pic_eoi(uint8_t irq) {
 }
 
 /* ===== Handlers ===== */
-
 static const char *exception_names[] = {
     "Divide by Zero", "Debug", "NMI", "Breakpoint", "Overflow",
-    "Bound Range Exceeded", "Invalid Opcode", "Device Not Available",
-    "Double Fault", "Coprocessor Segment Overrun", "Invalid TSS",
-    "Segment Not Present", "Stack-Segment Fault", "General Protection Fault",
-    "Page Fault", "Reserved", "x87 FPU Error", "Alignment Check",
-    "Machine Check", "SIMD Floating-Point", "Virtualization", "Reserved",
+    "Bound Range", "Invalid Opcode", "Device Not Available",
+    "Double Fault", "Coproc Overrun", "Invalid TSS",
+    "Segment Not Present", "Stack Fault", "General Protection",
+    "Page Fault", "Reserved", "x87 FPU", "Alignment Check",
+    "Machine Check", "SIMD FP", "Virtualization", "Reserved",
     "Reserved", "Reserved", "Reserved", "Reserved", "Reserved",
-    "Reserved", "Reserved", "Reserved", "Security Exception", "Reserved"
+    "Reserved", "Reserved", "Reserved", "Security", "Reserved"
 };
 
 void exception_handler(uint64_t int_no, uint64_t err_code) {
@@ -186,7 +179,7 @@ void exception_handler(uint64_t int_no, uint64_t err_code) {
     serial_puts(" — ");
     if (int_no < 32) serial_puts(exception_names[int_no]);
     serial_puts(" (err: ");
-    serial_puts(uitoa(err_code, buf));
+    serial_puts(uxtoa(err_code, buf));
     serial_puts(")\n");
     serial_puts("[!] Halting.\n");
     for (;;) __asm__ volatile ("hlt");
@@ -202,10 +195,8 @@ static uint64_t kbd_ticks = 0;
 
 void irq_default_handler(uint8_t irq) {
     if (irq == 0) {
-        /* Timer tick — trigger scheduler */
         sched_tick();
     } else if (irq == 1) {
-        /* Keyboard: read scancode from port 0x60 */
         uint8_t sc = inb(0x60);
         kbd_ticks++;
         char buf[32];
@@ -218,9 +209,24 @@ void irq_default_handler(uint8_t irq) {
     pic_eoi(irq);
 }
 
+/* Syscall handler: RAX=number, RDI=arg1, RSI=arg2 */
+void syscall_handler(struct registers *regs) {
+    switch (regs->rax) {
+        case 0: /* write_serial(ptr, len) */
+            serial_puts((const char *)(unsigned long)regs->rdi);
+            regs->rax = regs->rsi; /* return byte count */
+            break;
+        default:
+            regs->rax = (uint64_t)-1;
+            break;
+    }
+}
+
 void isr_handler(struct registers *regs) {
     if (regs->int_no < 32)
         exception_handler(regs->int_no, regs->err_code);
+    else if (regs->int_no == 128)
+        syscall_handler(regs);
 }
 
 void irq_handler(struct registers *regs) {

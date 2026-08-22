@@ -80,6 +80,13 @@ IRQ_ENTRY 13, 45
 IRQ_ENTRY 14, 46
 IRQ_ENTRY 15, 47
 
+/* Syscall gate (int 0x80) */
+.global isr128
+isr128:
+    push 0
+    push 128
+    jmp isr_common
+
 /* Common ISR handler */
 isr_common:
     push rax

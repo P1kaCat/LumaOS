@@ -26,6 +26,25 @@ struct gdt_ptr {
 #define KERNEL_CS 0x08
 #define KERNEL_DS 0x10
 
+/* ===== User mode (Ring 3) ===== */
+#define USER_CS 0x1B  /* GDT entry 3 | RPL 3 */
+#define USER_DS 0x23  /* GDT entry 4 | RPL 3 */
+
+struct tss {
+    uint32_t reserved0;
+    uint64_t rsp0;
+    uint64_t rsp1;
+    uint64_t rsp2;
+    uint64_t reserved1;
+    uint64_t ist[7];
+    uint64_t reserved2;
+    uint16_t reserved3;
+    uint16_t iomap_base;
+} __attribute__((packed));
+
+void tss_init(void);
+void syscall_handler(struct registers *regs);
+
 void gdt_init(void);
 
 /* ===== IDT ===== */

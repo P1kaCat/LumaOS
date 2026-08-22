@@ -89,3 +89,16 @@
 - 🔄 En cours
 - ✅ Terminé
 - ⏸️ En pause
+
+### Phase 1 — User mode / Ring 3 / Syscalls 🔄
+- [x] GDT: user code + data segments (DPL=3)
+- [x] TSS: RSP0 kernel stack for ring 3 transitions
+- [x] IDT: syscall gate at vector 128 (DPL=3, interrupt gate 0xEE)
+- [x] Paging: U/S bit set on all page table entries (user-accessible)
+- [x] Syscall handler: syscall 0 = write_serial(ptr, len)
+- [x] User program: prints via syscall, spins with pause
+- [x] enter_ring3: iretq with user CS/SS/RFLAGS
+- [ ] Test QEMU : Ring 3 execution + syscall + scheduler coexistence
+- [ ] Page-level isolation (separate user/kernel page tables)
+- [ ] Process abstraction (PID, address space, fork/exec)
+
