@@ -1,29 +1,25 @@
 /*
- * isr.S — Stubs ISR/IRQ pour LumaOS (Phase 0C)
- * Syntaxe Clang .intel_syntax (pas de NASM)
+ * isr.S — Stubs ISR/IRQ + context switch (Phase 0C++)
+ * Clang .intel_syntax (no NASM)
  */
 
 .intel_syntax noprefix
 
-/* Macro : stub ISR sans code d'erreur */
 .macro ISR_NOERR n
 .global isr\n
 isr\n:
-    push 0                /* faux err_code */
-    push \n               /* interrupt number */
-    jmp isr_common
-.endm
-
-/* Macro : stub ISR AVEC code d'erreur */
-.macro ISR_ERR n
-.global isr\n
-isr\n:
-                       /* err_code déjà sur la stack */
+    push 0
     push \n
     jmp isr_common
 .endm
 
-/* Macro : stub IRQ */
+.macro ISR_ERR n
+.global isr\n
+isr\n:
+    push \n
+    jmp isr_common
+.endm
+
 .macro IRQ_ENTRY n, irq
 .global irq\n
 irq\n:
@@ -32,7 +28,7 @@ irq\n:
     jmp irq_common
 .endm
 
-/* Exceptions (0-31) — certaines poussent déjà err_code */
+/* Exceptions 0-31 */
 ISR_NOERR 0
 ISR_NOERR 1
 ISR_NOERR 2
@@ -66,7 +62,7 @@ ISR_NOERR 29
 ISR_ERR   30
 ISR_NOERR 31
 
-/* IRQ 0-15 (remappées à 32-47) */
+/* IRQ 0-15 (vectors 32-47) */
 IRQ_ENTRY 0,  32
 IRQ_ENTRY 1,  33
 IRQ_ENTRY 2,  34
@@ -84,7 +80,7 @@ IRQ_ENTRY 13, 45
 IRQ_ENTRY 14, 46
 IRQ_ENTRY 15, 47
 
-/* Common ISR handler — push tous les registres, appelle C */
+/* Common ISR handler */
 isr_common:
     push rax
     push rbx
@@ -102,7 +98,7 @@ isr_common:
     push r14
     push r15
 
-    mov rdi, rsp          /* pointer to registers struct */
+    mov rdi, rsp
     call isr_handler
 
     pop r15
@@ -121,10 +117,10 @@ isr_common:
     pop rbx
     pop rax
 
-    add rsp, 16           /* pop int_no + err_code */
+    add rsp, 16
     iretq
 
-/* Common IRQ Handler — push registres, appelle C, EOI dans C */
+/* Common IRQ handler — with scheduler context switch */
 irq_common:
     push rax
     push rbx
@@ -145,6 +141,25 @@ irq_common:
     mov rdi, rsp
     call irq_handler
 
+    /* Check if scheduler requests a context switch */
+    mov al, byte ptr [sched_switch_pending]
+    test al, al
+    jz .no_switch
+    mov byte ptr [sched_switch_pending], 0
+
+    /* Save current RSP → current task->rsp */
+    mov rax, [sched_current]
+    mov [rax], rsp
+
+    /* Load next task RSP */
+    mov rax, [sched_next]
+    mov rsp, [rax]
+
+    /* current = next */
+    mov rax, [sched_next]
+    mov [sched_current], rax
+
+.no_switch:
     pop r15
     pop r14
     pop r13

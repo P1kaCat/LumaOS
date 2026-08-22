@@ -2,6 +2,7 @@
  * cpu.c — GDT, IDT, PIC setup pour LumaOS (Phase 0C)
  */
 #include "cpu.h"
+#include "sched.h"
 #include <stdint.h>
 
 /* ===== Serial (déclaré dans kernel.c, on redéfinit ici) ===== */
@@ -25,6 +26,14 @@ static char *uitoa(uint64_t n, char *buf) {
     while (n > 0) { tmp[i++] = '0' + (n % 10); n /= 10; }
     int j = 0; while (i > 0) buf[j++] = tmp[--i];
     buf[j] = 0;
+    return buf;
+}
+
+static char *uxtoa(uint64_t n, char *buf) {
+    if (!n) { buf[0]='0'; buf[1]=0; return buf; }
+    char tmp[32]; int i=0; const char *hex="0123456789ABCDEF";
+    while (n) { tmp[i++]=hex[n&0xF]; n>>=4; }
+    int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0;
     return buf;
 }
 
@@ -146,7 +155,7 @@ void pic_init(void) {
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x01), "dN"((uint16_t)PIC1_DATA));
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0x01), "dN"((uint16_t)PIC2_DATA));
     /* Masquer tout sauf IRQ1 (clavier) pour l'instant */
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0xFD), "dN"((uint16_t)PIC1_DATA)); /* 11111101 → IRQ1 only */
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0xFC), "dN"((uint16_t)PIC1_DATA)); /* 11111101 → IRQ1 only */
     __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)0xFF), "dN"((uint16_t)PIC2_DATA)); /* all masked */
     serial_puts("[+] PIC remapped (IRQ0-15 → vectors 32-47)\n");
 }
@@ -192,7 +201,10 @@ static uint8_t inb(uint16_t port) {
 static uint64_t kbd_ticks = 0;
 
 void irq_default_handler(uint8_t irq) {
-    if (irq == 1) {
+    if (irq == 0) {
+        /* Timer tick — trigger scheduler */
+        sched_tick();
+    } else if (irq == 1) {
         /* Keyboard: read scancode from port 0x60 */
         uint8_t sc = inb(0x60);
         kbd_ticks++;

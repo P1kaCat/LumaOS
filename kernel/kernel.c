@@ -2,6 +2,7 @@
 #include "handoff.h"
 #include "cpu.h"
 #include "mem.h"
+#include "sched.h"
 
 #define COM1 0x3F8
 static void serial_putc(char c) { __asm__ volatile ("outb %0, %1" : : "a"(c), "dN"((uint16_t)COM1)); }
@@ -22,17 +23,39 @@ static uint32_t make_color(uint8_t r, uint8_t g, uint8_t b, uint32_t fmt) {
     if (fmt == LUMAOS_PIXEL_BGR) return (uint32_t)b | ((uint32_t)g<<8) | ((uint32_t)r<<16);
     return (uint32_t)r | ((uint32_t)g<<8) | ((uint32_t)b<<16);
 }
-
 static void fb_fill(struct lumaos_handoff *ho, uint32_t c) {
     uint32_t *fb = (uint32_t *)(unsigned long)ho->framebuffer;
     uint32_t p = ho->fb_pitch / 4;
     for (uint32_t y=0;y<ho->fb_height;y++) for (uint32_t x=0;x<ho->fb_width;x++) fb[y*p+x]=c;
 }
-
 static void fb_rect(struct lumaos_handoff *ho, uint32_t c, uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
     uint32_t *fb = (uint32_t *)(unsigned long)ho->framebuffer;
     uint32_t p = ho->fb_pitch / 4;
     for (uint32_t dy=0;dy<h;dy++) for (uint32_t dx=0;dx<w;dx++) { uint32_t px=x+dx,py=y+dy; if(px<ho->fb_width&&py<ho->fb_height) fb[py*p+px]=c; }
+}
+
+/* Task 1: prints counter, halts, waits for timer */
+static void task1_main(void) {
+    uint64_t count = 0;
+    char buf[32];
+    for (;;) {
+        serial_puts("  [Task 1] tick ");
+        serial_puts(uitoa(count++, buf));
+        serial_puts("\n");
+        __asm__ volatile ("hlt");
+    }
+}
+
+/* Task 2: prints counter, halts, waits for timer */
+static void task2_main(void) {
+    uint64_t count = 0;
+    char buf[32];
+    for (;;) {
+        serial_puts("  [Task 2] tick ");
+        serial_puts(uitoa(count++, buf));
+        serial_puts("\n");
+        __asm__ volatile ("hlt");
+    }
 }
 
 void kernel_main(struct lumaos_handoff *ho) {
@@ -42,7 +65,7 @@ void kernel_main(struct lumaos_handoff *ho) {
     }
 
     serial_puts("\n================================\n");
-    serial_puts("  LumaOS Kernel — Phase 0C+\n");
+    serial_puts("  LumaOS Kernel — Phase 0C++\n");
     serial_puts("================================\n");
     serial_puts("Kernel is alive!\n\n");
 
@@ -59,30 +82,38 @@ void kernel_main(struct lumaos_handoff *ho) {
     pic_init();
     idt_init();
 
-    /* Paging */
+    /* Paging + Heap */
     serial_puts("\n[*] Setting up paging...\n");
     paging_init();
-
-    /* Heap */
     serial_puts("\n[*] Initializing heap...\n");
     heap_init(ho);
 
     /* Heap test */
-    serial_puts("\n[*] Heap test:\n");
     char buf[32];
     void *a = kmalloc(256);
     void *b = kmalloc(1024);
-    void *c = kmalloc(4096);
     serial_puts("  kmalloc(256)  = 0x"); serial_puts(uxtoa((uint64_t)(unsigned long)a, buf)); serial_puts("\n");
     serial_puts("  kmalloc(1024) = 0x"); serial_puts(uxtoa((uint64_t)(unsigned long)b, buf)); serial_puts("\n");
-    serial_puts("  kmalloc(4096) = 0x"); serial_puts(uxtoa((uint64_t)(unsigned long)c, buf)); serial_puts("\n");
+
+    /* Scheduler */
+    serial_puts("\n[*] Starting scheduler...\n");
+    sched_init();
+    task_create(task1_main, 1);
+    task_create(task2_main, 2);
+    pit_init(50);  /* 50Hz = switch every 20ms */
 
     /* Enable interrupts */
-    serial_puts("\n[+] Interrupts enabled (keyboard on IRQ1)\n");
+    serial_puts("[+] Interrupts enabled (timer 50Hz + keyboard)\n\n");
     __asm__ volatile ("sti");
 
-    serial_puts("\nLumaOS Phase 0C+ complete. Press keys in QEMU window.\n");
-    serial_puts("System idle.\n");
+    serial_puts("LumaOS Phase 0C++ complete. Scheduler running 3 tasks.\n\n");
 
-    for (;;) __asm__ volatile ("hlt");
+    /* Main task (task 0) */
+    uint64_t count = 0;
+    for (;;) {
+        serial_puts("  [Main] tick ");
+        serial_puts(uitoa(count++, buf));
+        serial_puts("\n");
+        __asm__ volatile ("hlt");
+    }
 }
