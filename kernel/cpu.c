@@ -6,6 +6,7 @@
 #include "cpu.h"
 #include "sched.h"
 #include "mem.h"
+#include "vfs.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -302,7 +303,70 @@ void irq_default_handler(uint8_t irq) {
 }
 
 /* ===== Syscall handler (Phase 5: stable API) ===== */
-/* RAX=number, RDI=arg1, RSI=arg2 */
+/* ===== Phase 6: User pointer validation ===== */
+
+/* User memory range: code 0x00800000, stack 0x00A00000-0x00C00000,
+ * heap 0x01000000-0x01400000. We accept any address in [0x00800000, USER_HEAP_MAX). */
+#define USER_ADDR_MIN 0x00800000ULL
+
+/* Validate that [addr, addr+len) is in user space and the pages are mapped.
+ * need_write: if 1, require PTE_WRITABLE in addition to PTE_PRESENT|PTE_USER.
+ * Returns 1 if valid, 0 otherwise. */
+static int validate_user_ptr(uint64_t addr, uint32_t len, int need_write) {
+    if (addr < USER_ADDR_MIN || addr >= USER_HEAP_MAX)
+        return 0;
+    if (len > 0 && (addr + len) > USER_HEAP_MAX)
+        return 0;
+
+    /* Must have a current user process with its own CR3 */
+    if (!sched_current || sched_current->cr3 == 0)
+        return 0;
+
+    uint64_t cr3 = sched_current->cr3;
+
+    /* Check every page that [addr, addr+len) spans */
+    uint64_t start_page = addr & ~0xFFFULL;
+    uint64_t end_addr = (len == 0) ? addr : addr + len - 1;
+    for (uint64_t va = start_page; va <= end_addr; va += PAGE_SIZE) {
+        uint64_t pte = get_page(cr3, va);
+        if (!(pte & PTE_PRESENT))
+            return 0;
+        if (!(pte & PTE_USER))
+            return 0;
+        if (need_write && !(pte & PTE_WRITABLE))
+            return 0;
+        if (va == end_addr) break;  /* avoid overflow on last iteration */
+    }
+    return 1;
+}
+
+/* Safely copy a null-terminated string from user space to a kernel buffer.
+ * Validates each page boundary. Returns string length, or -1 on error. */
+static int copy_str_from_user(char *dst, uint64_t src, int max_len) {
+    if (src < USER_ADDR_MIN || src >= USER_HEAP_MAX)
+        return -1;
+    if (!sched_current || sched_current->cr3 == 0)
+        return -1;
+
+    uint64_t cr3 = sched_current->cr3;
+    int i;
+    for (i = 0; i < max_len; i++) {
+        /* Check page mapping at each page boundary */
+        if ((i == 0) || (((src + i) & 0xFFF) == 0)) {
+            uint64_t pte = get_page(cr3, src + i);
+            if (!(pte & PTE_PRESENT) || !(pte & PTE_USER))
+                return -1;
+        }
+        char c = *(volatile char *)(unsigned long)(src + i);
+        dst[i] = c;
+        if (c == '\0')
+            return i;
+    }
+    dst[max_len - 1] = '\0';
+    return max_len - 1;
+}
+
+/* RAX=number, RDI=arg1, RSI=arg2, RDX=arg3 (Phase 6) */
 void syscall_handler(struct registers *regs) {
     switch (regs->rax) {
         case 0: /* write(fd, buf, len) */
@@ -373,6 +437,64 @@ void syscall_handler(struct registers *regs) {
         case 7: /* getpages() — return free page count */
             regs->rax = count_free_pages();
             break;
+
+        /* ===== Phase 6: Filesystem syscalls ===== */
+
+        case 8: { /* open(path) → fd  —  RDI = user path pointer */
+            uint64_t path_user = regs->rdi;
+            if (!validate_user_ptr(path_user, 1, 0)) {
+                regs->rax = (uint64_t)(int64_t)VFS_ERR_NOT_FOUND;
+                break;
+            }
+            char kpath[64];
+            int plen = copy_str_from_user(kpath, path_user, sizeof(kpath));
+            if (plen < 0) {
+                regs->rax = (uint64_t)(int64_t)VFS_ERR_NOT_FOUND;
+                break;
+            }
+            regs->rax = (uint64_t)(int64_t)vfs_open(kpath);
+            break;
+        }
+
+        case 9: { /* close(fd) —  RDI = fd */
+            int fd = (int)(int64_t)regs->rdi;
+            regs->rax = (uint64_t)(int64_t)vfs_close(fd);
+            break;
+        }
+
+        case 10: { /* read(fd, buf, len) → bytes read
+                   * RDI = fd, RSI = user buffer, RDX = length */
+            int fd = (int)(int64_t)regs->rdi;
+            uint64_t buf_user = regs->rsi;
+            uint32_t len = (uint32_t)regs->rdx;
+
+            if (len == 0) {
+                regs->rax = 0;
+                break;
+            }
+            if (!validate_user_ptr(buf_user, len, 1)) {
+                regs->rax = (uint64_t)(int64_t)-1;  /* invalid pointer */
+                break;
+            }
+
+            /* Read via kernel buffer, then copy to user space */
+            static uint8_t kbuf[512];
+            if (len > sizeof(kbuf))
+                len = sizeof(kbuf);
+
+            int n = vfs_read(fd, kbuf, len);
+            if (n < 0) {
+                regs->rax = (uint64_t)(int64_t)n;
+                break;
+            }
+            /* Copy read data to user space */
+            uint8_t *ubuf = (uint8_t *)(unsigned long)buf_user;
+            for (int i = 0; i < n; i++)
+                ubuf[i] = kbuf[i];
+            regs->rax = (uint64_t)n;
+            break;
+        }
+
         default:
             regs->rax = (uint64_t)-1;  /* error: unknown syscall */
             break;

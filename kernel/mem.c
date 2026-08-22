@@ -244,7 +244,24 @@ int unmap_page(uint64_t cr3, uint64_t va) {
 
 uint64_t get_page(uint64_t cr3, uint64_t va) {
     uint64_t *pte = walk_pt(cr3, va, 0, 0);
-    if (!pte) return 0;
+    if (!pte) {
+        /* walk_pt returns NULL for 2MB/1GB large pages.
+         * Walk the table manually to find the large-page entry
+         * so callers can check PRESENT/WRITABLE/USER flags. */
+        uint64_t *table = (uint64_t *)(unsigned long)cr3;
+        uint64_t idx4 = (va >> 39) & 0x1FF;
+        uint64_t idx3 = (va >> 30) & 0x1FF;
+        uint64_t idx2 = (va >> 21) & 0x1FF;
+
+        if (!(table[idx4] & PTE_PRESENT)) return 0;
+        table = (uint64_t *)(unsigned long)(table[idx4] & ~0xFFFULL);
+        if (!(table[idx3] & PTE_PRESENT)) return 0;
+        if (table[idx3] & PTE_PS) return table[idx3];  /* 1GB page */
+        table = (uint64_t *)(unsigned long)(table[idx3] & ~0xFFFULL);
+        if (!(table[idx2] & PTE_PRESENT)) return 0;
+        if (table[idx2] & PTE_PS) return table[idx2];  /* 2MB page */
+        return 0;
+    }
     return *pte;
 }
 
