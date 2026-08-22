@@ -4,8 +4,8 @@
 
 | # | Composant | Statut | Description |
 |---|-----------|--------|-------------|
-| 1 | Bootloader | ⬜ | Bootloader UEFI minimal |
-| 2 | Kernel minimal | ⬜ | Point d'entrée du kernel, gestion minimale |
+| 1 | Bootloader | ✅ | Bootloader UEFI minimal — affiche "LumaOS", charge kernel.elf, transmet framebuffer + memory map, exit boot services (Phase 0A + 0B) |
+| 2 | Kernel minimal | 🔄 | Point d'entrée du kernel, handoff bootloader→kernel, proof of life framebuffer + serial |
 | 3 | Gestion mémoire | ⬜ | Allocation mémoire basique |
 | 4 | Interruptions | ⬜ | Gestion des interruptions (IDT, ISR) |
 | 5 | Threads et processus | ⬜ | Scheduler minimal, multi-tâches cooperatif puis préemptif |
@@ -39,6 +39,35 @@
 | 18 | Drivers matériels | ⬜ | Drivers pour GPU, audio, réseau réels |
 | 19 | Support des jeux modernes | ⬜ | Tests de compatibilité AAA |
 | 20 | Optimisation | ⬜ | CPU, RAM, latence, temps de démarrage |
+
+## Détail des phases
+
+### Phase 0A — Bootloader UEFI ✅
+- [x] Toolchain définie (LLVM/Clang + LLD + NASM + QEMU/OVMF)
+- [x] Headers UEFI minimaux (efi_types.h)
+- [x] efi_main() : ClearScreen + OutputString "LumaOS"
+- [x] BOOTX64.EFI bootable dans QEMU/OVMF
+- [x] Makefile avec `make run`
+
+### Phase 0B — Kernel minimal 🔄
+- [x] Handoff struct bootloader → kernel (framebuffer + memory map)
+- [x] Bootloader : lit kernel.elf depuis le disque (SimpleFileSystem)
+- [x] Bootloader : parse ELF, charge segments à 0x100000
+- [x] Bootloader : récupère GOP (framebuffer)
+- [x] Bootloader : récupère memory map + ExitBootServices
+- [x] Bootloader : saute au kernel avec handoff en RDI
+- [x] Kernel : boot.asm (entry point, stack setup)
+- [x] Kernel : kernel.c (handoff validation, framebuffer fill, serial output)
+- [x] Linker script (kernel.elf à 0x100000)
+- [x] Root Makefile (build kernel + bootloader + image + QEMU)
+- [ ] Test dans QEMU : framebuffer change de couleur + serial output
+
+### Phase 0C — Fondations kernel (à venir)
+- [ ] GDT setup
+- [ ] IDT + ISR de base
+- [ ] Page tables (4-level paging)
+- [ ] Heap allocator
+- [ ] Scheduler minimal
 
 ## Stratégie de support matériel
 
