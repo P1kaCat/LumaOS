@@ -723,3 +723,25 @@
   ```
   Dis-moi ce que tu vois dans QEMU.
 
+
+104. "LumaOS" est marqué dans QEMU — Phase 0A validée ! 🎉 Le bootloader UEFI boot correctement et affiche "LumaOS".
+105. Parfait. On passe à la Phase 0B : le kernel minimal. Je vais créer :
+  - Le handoff struct (bootloader → kernel) avec framebuffer + memory map
+  - Le bootloader étendu (lit kernel.elf, parse ELF, exit boot services, jump au kernel)
+  - Le kernel (boot.asm + kernel.c + linker.ld)
+  - Le root Makefile (build kernel + bootloader + image + QEMU)
+  - Update de la ROADMAP
+  *Utilisé : bash (clone repo), write_file (handoff.h, efi_types.h, elf.h, efi_main.c, boot.asm, kernel.c, linker.ld, Makefiles, ROADMAP.md)*
+106. *Utilisé : bash (commit + push)*
+107. Pushé sur GitHub — commit `bd765b5`. Tous les fichiers de la Phase 0B sont dans le repo :
+  - `include/handoff.h` — struct handoff partagée (magic + framebuffer + memory map)
+  - `boot/efi/efi_types.h` — étendu avec BootServices, GOP, SimpleFileSystem, FileProtocol, GUIDs
+  - `boot/efi/elf.h` — types ELF64 minimaux pour parser kernel.elf
+  - `boot/efi/efi_main.c` — bootloader Phase 0B (lit kernel.elf, GOP, memory map, ExitBootServices, jump)
+  - `kernel/boot.asm` — entry point, stack 16KB, call kernel_main
+  - `kernel/kernel.c` — valide handoff, serial output COM1, framebuffer fill, halt
+  - `kernel/linker.ld` — kernel.elf à 0x100000
+  - `kernel/Makefile` — Clang + NASM + LLD
+  - `Makefile` (root) — make build/run/debug/clean
+  - `ROADMAP.md` — Phase 0A ✅, Phase 0B 🔄
+  Pour tester : `git pull` puis `make run` depuis le root du repo. Le kernel devrait changer la couleur de l'écran + écrire sur le port série.
