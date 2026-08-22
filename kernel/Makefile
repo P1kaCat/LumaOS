@@ -20,7 +20,7 @@ KERNEL_BIN := $(BUILD_DIR)/kernel.elf
 
 all: $(KERNEL_BIN)
 
-$(KERNEL_BIN): $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o $(BUILD_DIR)/user.o linker.ld
+$(KERNEL_BIN): $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o $(BUILD_DIR)/user.o $(BUILD_DIR)/user_code.o linker.ld
 	@mkdir -p $(BUILD_DIR)
 	$(LD) $(KERNEL_LDFLAGS) -o $@ $(BUILD_DIR)/boot.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o $(BUILD_DIR)/user.o $(BUILD_DIR)/user_code.o $(BUILD_DIR)/kernel.o
 	@echo "Kernel built: $@"
