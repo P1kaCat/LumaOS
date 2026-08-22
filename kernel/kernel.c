@@ -126,6 +126,25 @@ void kernel_main(struct lumaos_handoff *ho) {
     __asm__ volatile("movq (%1), %0" : "=a"(fault_val) : "b"(test_va));
     serial_puts(test_fault_caught ? "  [+] Page fault caught, system continues\n" : "  [!] No fault (unexpected)\n");
 
+    /* Free dynamic mapping test pages (test_pa + PT + PD allocated by walk_pt) */
+    free_page(test_pa);
+    free_user_pages(cr3, test_va, test_va + 0x200000ULL);
+    {
+        /* free_user_pages frees PT pages but not PD pages at PDPT level.
+           Manually free the PD page allocated by walk_pt at PDPT[4]. */
+        uint64_t *pml4_tbl = (uint64_t *)(cr3 & ~0xFFFULL);
+        uint64_t pdpt_val = pml4_tbl[0];
+        if (pdpt_val & PTE_PRESENT) {
+            uint64_t *pdpt_tbl = (uint64_t *)(pdpt_val & ~0xFFFULL);
+            uint64_t pd_val = pdpt_tbl[4];
+            if (pd_val & PTE_PRESENT && !(pd_val & PTE_PS)) {
+                free_page(pd_val & ~0xFFFULL);
+                pdpt_tbl[4] = 0;
+            }
+        }
+    }
+    serial_puts("  [+] Dynamic mapping test pages freed\n");
+
     /* ---- Phase 5: scheduler + shell ---- */
     serial_puts("\n[*] Starting scheduler...\n");
     sched_init();

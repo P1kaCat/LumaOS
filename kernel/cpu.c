@@ -28,37 +28,81 @@ static char *uxtoa(uint64_t n, char *buf) {
 static char kb_buffer[KB_BUF_SIZE];
 static int kb_head = 0;
 static int kb_tail = 0;
+static int shift_pressed = 0;
 
-/* Set 1 scancode → ASCII (AZERTY FR, lowercase, no Shift)
+/* Set 1 scancode → ASCII — AZERTY FR unshifted (lowercase)
  *
- * Physical key positions mapped to AZERTY unshifted characters.
- * Number row: mapped to digits (Shift would give accented chars, not
- * representable in basic ASCII — use Shift for digits on real AZERTY).
- * Letters: a/z swapped vs QWERTY, plus m position differs.
- * Special: ^ \$ ù * , ; : ! mapped to ASCII equivalents.
+ * Physical key positions → AZERTY unshifted characters.
+ * Non-ASCII chars (é è ç à ù ²) map to 0 (skipped) — use Shift
+ * for their digit equivalents.
+ * Letters: a/z swapped vs QWERTY, m at position 0x27.
  */
 static const char scancode_map[128] = {
-    /* Number row (AZERTY unshifted: & é " ' ( - è _ ç à ) =, mapped to digits) */
-    [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4',
-    [0x06] = '5', [0x07] = '6', [0x08] = '7', [0x09] = '8',
-    [0x0A] = '9', [0x0B] = '0',
-    [0x0C] = '-', [0x0D] = '=',
+    /* Number row: & é " ' ( - è _ ç à ) = */
+    [0x02] = '&',
+    /* 0x03: é → not ASCII, skip */
+    [0x04] = '"',
+    [0x05] = '\'',
+    [0x06] = '(',
+    [0x07] = '-',
+    /* 0x08: è → not ASCII, skip */
+    [0x09] = '_',
+    /* 0x0A: ç → not ASCII, skip */
+    /* 0x0B: à → not ASCII, skip */
+    [0x0C] = ')',
+    [0x0D] = '=',
     [0x0E] = '\b', [0x0F] = '\t',
     /* Top letter row: azertyuiop ^ $ */
     [0x10] = 'a', [0x11] = 'z', [0x12] = 'e', [0x13] = 'r',
     [0x14] = 't', [0x15] = 'y', [0x16] = 'u', [0x17] = 'i',
     [0x18] = 'o', [0x19] = 'p',
-    [0x1A] = '^', [0x1B] = '\$',
+    [0x1A] = '^', [0x1B] = '$',
     [0x1C] = '\n',
     /* Home row: qsdfghjklm ù * */
     [0x1E] = 'q', [0x1F] = 's', [0x20] = 'd', [0x21] = 'f',
     [0x22] = 'g', [0x23] = 'h', [0x24] = 'j', [0x25] = 'k',
     [0x26] = 'l', [0x27] = 'm',
-    [0x28] = '*',  /* ù on AZERTY, * used as ASCII substitute */
+    /* 0x28: ù → not ASCII, skip */
+    [0x29] = '*',
     /* Bottom row: wxcvbn , ; : ! */
     [0x2C] = 'w', [0x2D] = 'x', [0x2E] = 'c', [0x2F] = 'v',
     [0x30] = 'b', [0x31] = 'n',
     [0x32] = ',', [0x33] = ';', [0x34] = ':', [0x35] = '!',
+    [0x39] = ' ',
+};
+
+/* Set 1 scancode → ASCII — AZERTY FR shifted (uppercase + digits)
+ *
+ * Shift + number row → digits (1-0)
+ * Shift + letters → uppercase
+ * Shift + special → ? . / % etc.
+ */
+static const char scancode_shift_map[128] = {
+    /* Number row shifted: 1 2 3 4 5 6 7 8 9 0 */
+    [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4',
+    [0x06] = '5', [0x07] = '6', [0x08] = '7', [0x09] = '8',
+    [0x0A] = '9', [0x0B] = '0',
+    /* 0x0C: ° → not ASCII, skip */
+    [0x0D] = '+',
+    [0x0E] = '\b', [0x0F] = '\t',
+    /* Top letter row: AZERTYUIOP */
+    [0x10] = 'A', [0x11] = 'Z', [0x12] = 'E', [0x13] = 'R',
+    [0x14] = 'T', [0x15] = 'Y', [0x16] = 'U', [0x17] = 'I',
+    [0x18] = 'O', [0x19] = 'P',
+    /* 0x1A: ¨ dead key → skip */
+    [0x1B] = '$',  /* £ → not ASCII, keep $ */
+    [0x1C] = '\n',
+    /* Home row: QSDFGHJKLM% */
+    [0x1E] = 'Q', [0x1F] = 'S', [0x20] = 'D', [0x21] = 'F',
+    [0x22] = 'G', [0x23] = 'H', [0x24] = 'J', [0x25] = 'K',
+    [0x26] = 'L', [0x27] = 'M',
+    [0x28] = '%',  /* ù shifted → % */
+    [0x29] = '*',  /* µ → not ASCII, keep * */
+    /* Bottom row: WXCVBN ? . / */
+    [0x2C] = 'W', [0x2D] = 'X', [0x2E] = 'C', [0x2F] = 'V',
+    [0x30] = 'B', [0x31] = 'N',
+    [0x32] = '?', [0x33] = '.', [0x34] = '/',
+    /* 0x35: § → not ASCII, skip */
     [0x39] = ' ',
 };
 
@@ -243,8 +287,14 @@ void irq_default_handler(uint8_t irq) {
     } else if (irq == 1) {
         /* Phase 5: keyboard scancode → ASCII → ring buffer */
         uint8_t sc = inb(0x60);
-        if (!(sc & 0x80) && sc < 128) {  /* make code only */
-            char c = scancode_map[sc];
+        if (sc == 0x2A || sc == 0x36) {
+            /* Left Shift or Right Shift pressed */
+            shift_pressed = 1;
+        } else if (sc == 0xAA || sc == 0xB6) {
+            /* Left Shift or Right Shift released */
+            shift_pressed = 0;
+        } else if (!(sc & 0x80) && sc < 128) {  /* make code only */
+            char c = shift_pressed ? scancode_shift_map[sc] : scancode_map[sc];
             if (c) {
                 int next_tail = (kb_tail + 1) % KB_BUF_SIZE;
                 if (next_tail != kb_head) {  /* buffer not full */
