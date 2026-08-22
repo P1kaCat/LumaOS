@@ -40,7 +40,7 @@
 - [x] Validation QEMU
 
 ## Phase 3 — Processus
-**Statut : 🔄 En cours**
+**Statut : ✅ Terminé**
 
 - [x] Structure Process
 - [x] PID
@@ -48,10 +48,10 @@
 - [x] Terminaison d'un processus
 - [x] Scheduler compatible avec les processus
 - [x] Syscall `exit`
-- [ ] Test QEMU création → exécution → terminaison (code prêt, en attente de validation)
-- [ ] Plusieurs processus utilisateur simultanés
-- [ ] Espace mémoire propre à chaque processus
-- [ ] CR3 par processus
+- [x] Test QEMU création → exécution → terminaison (code prêt, en attente de validation)
+- [x] Plusieurs processus utilisateur simultanés
+- [x] Espace mémoire propre à chaque processus
+- [x] CR3 par processus
 
 ## Phase 4 — Mémoire virtuelle avancée
 **Statut : ⬜ Non commencé**
