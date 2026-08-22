@@ -7,7 +7,7 @@
  * Basé sur la spec UEFI 2.x :
  *   §2.3.1 — Types de base
  *   §4.3   — EFI_SYSTEM_TABLE
- *   §7.2   — EFI_BOOT_SERVICES
+ *   §7.2   — EFI_BOOT_SERVICES (commence par EFI_TABLE_HEADER !)
  *   §12.4  — EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
  *   §13.4  — EFI_SIMPLE_FILE_SYSTEM_PROTOCOL
  *   §13.5  — EFI_FILE_PROTOCOL
@@ -59,7 +59,7 @@ static const struct efi_guid EFI_SFS_GUID = {
     { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b }
 };
 
-/* ===== EFI_TABLE_HEADER ===== */
+/* ===== EFI_TABLE_HEADER (24 bytes) ===== */
 
 struct efi_table_header {
     unsigned long long signature;
@@ -159,70 +159,98 @@ struct efi_file_protocol {
 /* Modes d'ouverture de fichier */
 #define EFI_FILE_MODE_READ 1
 
-/* ===== Boot Services (§7.2) ===== */
-
+/*
+ * ===== Boot Services (§7.2) =====
+ *
+ * IMPORTANT : EFI_BOOT_SERVICES commence par EFI_TABLE_HEADER (24 bytes).
+ * Sans ce header, tous les offsets sont décalés de 24 bytes et on appelle
+ * les mauvaises fonctions !
+ */
 struct efi_boot_services {
-    void *raise_tpl;                                  /* 0   */
-    void *restore_tpl;                                /* 8   */
-    efi_status_t (*allocate_pages)(                   /* 16  */
+    struct efi_table_header header;                  /* 0   (24 bytes) */
+
+    /* Task Priority Services */
+    void *raise_tpl;                                  /* 24  */
+    void *restore_tpl;                                /* 32  */
+
+    /* Memory Services */
+    efi_status_t (*allocate_pages)(                   /* 40  */
         unsigned int allocate_type,
         unsigned int memory_type,
         unsigned long long pages,
         unsigned long long *memory);
-    void *free_pages;                                  /* 24  */
-    efi_status_t (*get_memory_map)(                    /* 32  */
+    void *free_pages;                                  /* 48  */
+    efi_status_t (*get_memory_map)(                    /* 56  */
         unsigned long long *memory_map_size,
         void *memory_map,
         unsigned long long *map_key,
         unsigned long long *descriptor_size,
         unsigned int *descriptor_version);
-    efi_status_t (*allocate_pool)(                    /* 40  */
+    efi_status_t (*allocate_pool)(                    /* 64  */
         unsigned int pool_type,
         unsigned long long size,
         void **buffer);
-    void *free_pool;                                   /* 48  */
-    void *create_event;                                /* 56  */
-    void *set_timer;                                   /* 64  */
-    void *wait_for_event;                              /* 72  */
-    void *signal_event;                                /* 80  */
-    void *close_event;                                  /* 88  */
-    void *check_event;                                 /* 96  */
-    void *install_protocol_interface;                   /* 104 */
-    void *reinstall_protocol_interface;                /* 112 */
-    void *uninstall_protocol_interface;                /* 120 */
-    void *handle_protocol;                             /* 128 */
-    void *reserved;                                    /* 136 */
-    void *register_protocol_notify;                    /* 144 */
-    void *locate_handle;                               /* 152 */
-    void *locate_device_path;                           /* 160 */
-    void *install_configuration_table;                  /* 168 */
-    void *load_image;                                  /* 176 */
-    void *start_image;                                 /* 184 */
-    void *exit;                                        /* 192 */
-    void *unload_image;                                 /* 200 */
-    efi_status_t (*exit_boot_services)(                /* 208 */
+    void *free_pool;                                   /* 72  */
+
+    /* Event & Timer Services */
+    void *create_event;                                /* 80  */
+    void *set_timer;                                   /* 88  */
+    void *wait_for_event;                              /* 96  */
+    void *signal_event;                                /* 104 */
+    void *close_event;                                  /* 112 */
+    void *check_event;                                 /* 120 */
+
+    /* Protocol Handler Services */
+    void *install_protocol_interface;                   /* 128 */
+    void *reinstall_protocol_interface;                /* 136 */
+    void *uninstall_protocol_interface;                /* 144 */
+    void *handle_protocol;                             /* 152 */
+    void *reserved;                                    /* 160 */
+    void *register_protocol_notify;                    /* 168 */
+    void *locate_handle;                               /* 176 */
+    void *locate_device_path;                           /* 184 */
+    void *install_configuration_table;                  /* 192 */
+
+    /* Image Services */
+    void *load_image;                                  /* 200 */
+    void *start_image;                                 /* 208 */
+    void *exit;                                        /* 216 */
+    void *unload_image;                                 /* 224 */
+    efi_status_t (*exit_boot_services)(                /* 232 */
         efi_handle_t image_handle,
         unsigned long long map_key);
-    void *get_next_monotonic_count;                     /* 216 */
-    void *stall;                                       /* 224 */
-    void *set_watchdog_timer;                           /* 232 */
-    void *connect_controller;                           /* 240 */
-    void *disconnect_controller;                        /* 248 */
-    void *open_protocol;                               /* 256 */
-    void *close_protocol;                               /* 264 */
-    void *open_protocol_information;                    /* 272 */
-    void *protocols_per_handle;                        /* 280 */
-    void *locate_handle_buffer;                         /* 288 */
-    efi_status_t (*locate_protocol)(                    /* 296 */
+
+    /* Miscellaneous Services */
+    void *get_next_monotonic_count;                     /* 240 */
+    void *stall;                                       /* 248 */
+    void *set_watchdog_timer;                           /* 256 */
+
+    /* Driver Support Services */
+    void *connect_controller;                           /* 264 */
+    void *disconnect_controller;                        /* 272 */
+
+    /* Open and Close Protocol Services */
+    void *open_protocol;                               /* 280 */
+    void *close_protocol;                               /* 288 */
+    void *open_protocol_information;                    /* 296 */
+
+    /* Library Services */
+    void *protocols_per_handle;                        /* 304 */
+    void *locate_handle_buffer;                         /* 312 */
+    efi_status_t (*locate_protocol)(                    /* 320 */
         struct efi_guid *guid,
         void *registration,
         void **protocol_interface);
-    void *install_multiple_protocol_interfaces;         /* 304 */
-    void *uninstall_multiple_protocol_interfaces;       /* 312 */
-    void *calculate_crc32;                             /* 320 */
-    void *copy_mem;                                    /* 328 */
-    void *set_mem;                                     /* 336 */
-    void *create_event_ex;                             /* 344 */
+    void *install_multiple_protocol_interfaces;         /* 328 */
+    void *uninstall_multiple_protocol_interfaces;       /* 336 */
+
+    /* CRC Services */
+    void *calculate_crc32;                             /* 344 */
+
+    /* Miscellaneous Services */
+    void *copy_mem;                                    /* 352 */
+    void *set_mem;                                     /* 360 */
+    void *create_event_ex;                             /* 368 */
 };
 
 /* ===== EFI_SYSTEM_TABLE (§4.3) ===== */
