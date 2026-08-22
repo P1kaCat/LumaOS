@@ -244,19 +244,19 @@ void kernel_main(struct lumaos_handoff *ho) {
         vfs_init();
 
         int vfs_ok = 1;
+        char file_buf[256];  /* shared test buffer for all VFS tests */
 
         /* Test 1: Open HELLO.TXT and read its contents */
         int fd = vfs_open("hello.txt");
         if (fd < 0) {
             serial_puts("  [!] vfs_open(\"hello.txt\") failed: ");
-            char ebuf[8]; serial_puts(uitoa((uint64_t)fd, ebuf)); serial_puts("\n");
+            serial_puts(uitoa((uint64_t)(unsigned)fd, buf)); serial_puts("\n");
             vfs_ok = 0;
         } else {
             serial_puts("  [+] vfs_open(\"hello.txt\") = fd ");
             serial_puts(uitoa((uint64_t)fd, buf)); serial_puts("\n");
 
             /* Read file contents */
-            char file_buf[256];
             int n = vfs_read(fd, file_buf, sizeof(file_buf) - 1);
             if (n < 0) {
                 serial_puts("  [!] vfs_read failed: ");
@@ -328,10 +328,9 @@ void kernel_main(struct lumaos_handoff *ho) {
         if (fd3 >= 0) {
             serial_puts("  [+] vfs_open(\"test.txt\") = fd ");
             serial_puts(uitoa((uint64_t)fd3, buf)); serial_puts("\n");
-            char tbuf[128];
-            int tn = vfs_read(fd3, tbuf, sizeof(tbuf) - 1);
+            int tn = vfs_read(fd3, file_buf, sizeof(file_buf) - 1);
             if (tn > 0) {
-                tbuf[tn] = 0;
+                file_buf[tn] = 0;
                 serial_puts("  [+] Read ");
                 serial_puts(uitoa((uint64_t)tn, buf));
                 serial_puts(" bytes from TEST.TXT\n");
