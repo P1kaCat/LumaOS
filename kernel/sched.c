@@ -100,10 +100,13 @@ int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3, uint6
 
 void proc_terminate(int pid) {
     for (int i = 0; i < num_tasks; i++) {
-        if (tasks[i].pid == pid) {
+        /* Must match both pid AND is_user: kernel tasks (task_create) use
+           the same ID space as user processes (proc_create_user), so a
+           pid-only match could terminate the wrong task. */
+        if (tasks[i].pid == pid && tasks[i].is_user) {
             tasks[i].state = PROC_TERMINATED;
             /* Phase 4: free dynamically allocated pages (stack + heap) */
-            if (tasks[i].is_user && tasks[i].cr3) {
+            if (tasks[i].cr3) {
                 free_user_pages(tasks[i].cr3,
                     USER_STACK_BASE, tasks[i].user_stack_top);
                 free_user_pages(tasks[i].cr3,
