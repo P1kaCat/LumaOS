@@ -13,7 +13,11 @@
   ·
   <a href="ROADMAP.md">Roadmap</a>
   ·
-  <a href="MEMORY.md">Technical Memory</a>
+  <a href="ARCHITECTURE.md">Architecture</a>
+  ·
+  <a href="TOOLCHAIN.md">Toolchain</a>
+  ·
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 ---
@@ -61,38 +65,81 @@ Every major component should answer one question:
 
 ## Current Status
 
-LumaOS is currently in **Phase 5 — Syscalls & Userland**.
+LumaOS is actively under development.
 
-The kernel already supports:
+The project is currently focused on **Phase 5 — Syscalls & Userland**.
 
-- UEFI boot
-- ELF kernel loading
-- x86_64 long mode
-- GDT / IDT / TSS
-- PIC
-- Paging
-- Kernel/user memory isolation
-- Ring 3 user processes
-- Per-process address spaces
-- CR3 switching
-- Kernel stacks
-- Physical page allocation
-- Dynamic page mapping
-- Lazy user memory allocation
-- Dynamic user stacks
-- Kernel heap
-- Preemptive scheduling
-- PIT timer
-- Keyboard input
-- System calls
-- Userland shell
-- Process termination and memory cleanup
+For the complete development status, completed milestones, and upcoming work, see the **[Roadmap](ROADMAP.md)**.
 
-The current shell provides basic commands such as:
+> **Current milestone:** Building the foundations of a usable userland environment with system calls, an interactive shell, process management, and basic input/output.
 
-```text
-help
-pid
-mem
-sleep N
-exit
+---
+
+## Quick Start
+
+### Requirements
+
+- Windows, Linux, or another environment capable of running the build toolchain
+- Clang / LLVM
+- LLD
+- GNU Make
+- QEMU
+- OVMF / UEFI firmware
+
+See **[TOOLCHAIN.md](TOOLCHAIN.md)** for the complete toolchain and setup details.
+
+### Build & Run
+
+```bash
+git clone https://github.com/P1kaCat/LumaOS.git
+cd LumaOS
+make clean && make
+make run
+```
+
+LumaOS currently boots through **UEFI/OVMF** and runs inside **QEMU**.
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Roadmap](ROADMAP.md) | Development phases, completed features, and upcoming milestones |
+| [Architecture](ARCHITECTURE.md) | System architecture and core design |
+| [Toolchain](TOOLCHAIN.md) | Compiler, assembler, linker, firmware, and development tools |
+| [Contributing](CONTRIBUTING.md) | Build, test, development, and contribution guidelines |
+| [Technical Memory](MEMORY.md) | Detailed notes about the current low-level implementation |
+
+---
+
+## Project Philosophy
+
+LumaOS is built around a few core principles:
+
+- **Gaming-first** — system design starts from the gaming experience.
+- **Minimal** — avoid unnecessary layers and services.
+- **Performance-oriented** — keep overhead low and behavior predictable.
+- **Hardware-focused** — progressively move closer to direct hardware control.
+- **Modular** — keep major subsystems replaceable and independently evolvable.
+- **Open development** — document the architecture and development process.
+
+---
+
+## Contributing
+
+LumaOS is an experimental project and contributions, ideas, testing, and technical feedback are welcome.
+
+Before contributing, please read **[CONTRIBUTING.md](CONTRIBUTING.md)** and check the **[Roadmap](ROADMAP.md)** to understand the current priorities.
+
+---
+
+## License
+
+LumaOS is open source. See the repository license for the terms of use and contribution.
+
+---
+
+<p align="center">
+  <strong>LumaOS — Gaming, rebuilt from the ground up.</strong>
+</p>
