@@ -62,7 +62,7 @@
 - [x] Root Makefile (build kernel + bootloader + image + QEMU)
 - [x] Test dans QEMU : framebuffer change de couleur + serial output — VALIDÉ ✅
 
-### Phase 0C — Fondations kernel ✅ (GDT/IDT/PIC/Paging/Heap/Scheduler)
+### Phase 0C++ — Fondations kernel ✅ (GDT/IDT/PIC/Paging/Heap/Scheduler)
 - [x] GDT setup (null + code64 + data segments)
 - [x] PIC 8259A remapping (IRQ0-15 → vectors 32-47)
 - [x] IDT setup (256 entries, exception + IRQ stubs)
@@ -72,7 +72,7 @@
 - [x] Page tables (4-level paging) — 4GB identity-mapped, 2MB pages
 - [x] Heap allocator — bump allocator from UEFI conventional memory
 - [x] Keyboard interrupts (IRQ1 scancode reader)
-- [x] Scheduler (round-robin, PIT 50Hz, 3 tasks, context switch)
+- [x] Scheduler (round-robin, PIT 50Hz, 3 tasks, context switch) — VALIDÉ QEMU ✅
 
 ## Stratégie de support matériel
 
