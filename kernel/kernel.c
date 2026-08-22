@@ -4,14 +4,14 @@
 #include "mem.h"
 #include "sched.h"
 #include "user.h"
+#include "ata.h"
 
-#define COM1 0x3F8
-static char *uitoa(uint64_t n, char *buf) {
+char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
     char tmp[32]; int i=0; while (n) { tmp[i++]='0'+(n%10); n/=10; }
     int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
 }
-static char *uxtoa(uint64_t n, char *buf) {
+char *uxtoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
     char tmp[32]; int i=0; const char *h="0123456789ABCDEF";
     while (n) { tmp[i++]=h[n&0xF]; n>>=4; }
@@ -143,6 +143,37 @@ void kernel_main(struct lumaos_handoff *ho) {
         }
     }
     serial_puts("  [+] Dynamic mapping test pages freed\n");
+
+    /* ---- Phase 6: ATA/IDE disk driver ---- */
+    serial_puts("\n[*] Initializing ATA/IDE driver...\n");
+    if (ata_init() != 0) {
+        serial_puts("[!] ATA init failed — filesystem disabled\n");
+    } else {
+        /* Raw sector read test: read sector 0 (boot sector) */
+        serial_puts("[*] Testing raw sector read (sector 0)...\n");
+        uint8_t sector_buf[512];
+        if (ata_read_sector(0, sector_buf) != 0) {
+            serial_puts("  [!] Sector read failed\n");
+        } else {
+            serial_puts("  First 16 bytes: ");
+            for (int i = 0; i < 16; i++) {
+                char hex[4];
+                const char *h = "0123456789ABCDEF";
+                hex[0] = h[sector_buf[i] >> 4];
+                hex[1] = h[sector_buf[i] & 0xF];
+                hex[2] = ' ';
+                hex[3] = 0;
+                serial_puts(hex);
+            }
+            serial_puts("\n");
+            /* Verify boot signature */
+            if (sector_buf[510] == 0x55 && sector_buf[511] == 0xAA) {
+                serial_puts("  [+] Boot signature 0x55AA OK\n");
+            } else {
+                serial_puts("  [!] Boot signature mismatch\n");
+            }
+        }
+    }
 
     /* ---- Phase 5: scheduler + shell ---- */
     serial_puts("\n[*] Starting scheduler...\n");

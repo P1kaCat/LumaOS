@@ -6,6 +6,27 @@
 
 #include <stdint.h>
 
+/* ===== Port I/O (used by drivers) ===== */
+static inline uint8_t inb(uint16_t port) {
+    uint8_t v;
+    __asm__ volatile ("inb %1, %0" : "=a"(v) : "dN"(port));
+    return v;
+}
+
+static inline uint16_t inw(uint16_t port) {
+    uint16_t v;
+    __asm__ volatile ("inw %1, %0" : "=a"(v) : "dN"(port));
+    return v;
+}
+
+static inline void outb(uint16_t port, uint8_t val) {
+    __asm__ volatile ("outb %0, %1" : : "a"(val), "dN"(port));
+}
+
+static inline void outw(uint16_t port, uint16_t val) {
+    __asm__ volatile ("outw %0, %1" : : "a"(val), "dN"(port));
+}
+
 /* ===== GDT ===== */
 
 struct gdt_entry {
@@ -46,6 +67,10 @@ void tss_init(void);
 struct registers;
 void syscall_handler(struct registers *regs);
 void serial_puts(const char *s);
+
+/* Integer to string (for kernel debug output) */
+char *uitoa(uint64_t n, char *buf);
+char *uxtoa(uint64_t n, char *buf);
 
 void gdt_init(void);
 
