@@ -5,7 +5,7 @@
 #
 # Jobs:
 #   build     — make clean && make, verify artifacts
-#   qemu-test — boot in QEMU, check serial output for expected markers
+#   qemu-test — boot in QEMU headless, check serial output for expected markers
 
 name: Build & Test
 
@@ -63,11 +63,24 @@ jobs:
       - name: Build
         run: make clean && make
 
-      - name: Boot in QEMU (30s timeout, serial capture)
+      - name: Boot in QEMU (headless, 30s timeout)
         run: |
-          # timeout kills make/QEMU after 30s (SIGTERM + SIGKILL after 5s)
-          # Serial output (-serial stdio) is captured via tee
-          timeout -k 5 30 make run 2>&1 | tee serial.log || true
+          # Copy OVMF vars (normally done by 'make run')
+          cp tools/ovmf/OVMF_VARS.fd build/ovmf_vars.fd
+
+          # Boot QEMU headless — mirrors Makefile 'run' target but with:
+          #   -display none  : no GTK in headless CI
+          #   -no-reboot     : exit on triple fault instead of reboot loop
+          # Serial output (-serial stdio) captured via tee
+          # timeout sends SIGTERM after 30s, SIGKILL after 5 more
+          timeout -k 5 30 qemu-system-x86_64 \
+            -display none \
+            -no-reboot \
+            -drive if=pflash,format=raw,unit=0,file=tools/ovmf/OVMF_CODE.fd,readonly=on \
+            -drive if=pflash,format=raw,unit=1,file=build/ovmf_vars.fd \
+            -drive file=fat:rw:build/efi_root,format=raw,media=disk \
+            -drive file=build/disk.img,format=raw,if=ide,index=1 \
+            -serial stdio 2>&1 | tee serial.log || true
 
       - name: Verify serial output markers
         run: |
