@@ -80,24 +80,23 @@
 - [x] Parcours des page tables 4-level
 - [x] Allocation dynamique des niveaux de page tables
 - [x] `invlpg` après modification des mappings
-- [ ] Validation QEMU du mapping dynamique
-- [ ] Test écriture/lecture via VA mappée
-- [ ] Test page fault après `unmap_page()`
+- [x] Validation QEMU du mapping dynamique
+- [x] Test écriture/lecture via VA mappée
+- [x] Test page fault après `unmap_page()`
 
 ### Isolation mémoire
 - [x] CR3 séparé par processus
 - [x] Page tables par processus
 - [x] Protection inter-processus
-- [ ] Protection mémoire complète par processus
+- [ ] Protection mémoire complète par processus (test accès kernel → PF)
 - [ ] Libération des pages d'un processus à sa terminaison
 
 ### Mémoire utilisateur
-- [ ] Heap utilisateur
+- [ ] Heap utilisateur (région dédiée, syscall `sbrk`)
 - [ ] Allocation dynamique userland
-- [ ] Mapping de pages utilisateur à la demande
-- [ ] Page fault utilisateur exploitable
-- [ ] Lazy allocation
-- [ ] Stack utilisateur dynamique
+- [ ] Mapping de pages utilisateur à la demande (lazy allocation)
+- [ ] Page fault utilisateur exploitable (not-present vs protection)
+- [ ] Stack utilisateur dynamique (région séparée, croissance par PF)
 
 ---
 
@@ -109,7 +108,8 @@
 - [ ] `read`
 - [x] `exit`
 - [ ] `sleep`
-- [ ] `getpid`
+- [x] `getpid`
+- [x] `sbrk` (Phase 4)
 - [ ] Gestion des erreurs syscall
 - [ ] Gestion des fichiers
 - [ ] Programme `init`

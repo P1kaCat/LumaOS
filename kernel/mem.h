@@ -40,4 +40,9 @@ int unmap_page(uint64_t cr3, uint64_t va);
 /* get_page: read the PTE for va. Returns 0 if unmapped. */
 uint64_t get_page(uint64_t cr3, uint64_t va);
 
+/* free_user_pages: free all dynamically mapped 4KB pages (data + PT pages)
+   in a VA range. Does not free 2MB large pages (kernel mappings).
+   Called on process termination to clean up stack/heap. */
+void free_user_pages(uint64_t cr3, uint64_t va_start, uint64_t va_end);
+
 #endif

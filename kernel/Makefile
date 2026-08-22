@@ -1,4 +1,4 @@
-# kernel/Makefile — LumaOS Kernel (Phase 1)
+# kernel/Makefile — LumaOS Kernel (Phase 4)
 # Prérequis : LLVM/Clang + LLD. Pas besoin de NASM.
 
 BUILD_DIR := ../build/kernel
@@ -29,7 +29,7 @@ $(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
-$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h ../include/handoff.h
+$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
 
@@ -41,14 +41,13 @@ $(BUILD_DIR)/mem.o: mem.c mem.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c mem.c -o $@
 
-$(BUILD_DIR)/sched.o: sched.c sched.h
+$(BUILD_DIR)/sched.o: sched.c sched.h cpu.h mem.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c sched.c -o $@
 
 $(BUILD_DIR)/user.o: user.c user.h cpu.h sched.h mem.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c user.c -o $@
-
 
 $(BUILD_DIR)/user_code.o: user_code.S
 	@mkdir -p $(BUILD_DIR)

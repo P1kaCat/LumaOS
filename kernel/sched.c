@@ -1,6 +1,10 @@
-/* sched.c — Round-robin scheduler + process abstraction + PIT */
+/* sched.c — Round-robin scheduler + process abstraction + PIT
+ * Phase 3: basic process support
+ * Phase 4: user memory regions, page cleanup on termination
+ */
 #include "sched.h"
 #include "cpu.h"
+#include "mem.h"
 
 static struct task tasks[MAX_TASKS];
 static int num_tasks = 0;
@@ -28,7 +32,11 @@ void sched_init(void) {
     tasks[0].is_user = 0;
     tasks[0].rsp = 0;
     tasks[0].kernel_rsp = 0;
-    tasks[0].cr3 = 0;  /* kernel task — no CR3 switch */
+    tasks[0].cr3 = 0;
+    tasks[0].user_stack_top = 0;
+    tasks[0].user_stack_limit = 0;
+    tasks[0].user_heap_base = 0;
+    tasks[0].user_heap_limit = 0;
     num_tasks = 1;
     sched_current = &tasks[0];
     sched_next = &tasks[0];
@@ -43,6 +51,10 @@ void task_create(void (*entry)(void), int id) {
     t->is_user = 0;
     t->kernel_rsp = 0;
     t->cr3 = 0;
+    t->user_stack_top = 0;
+    t->user_stack_limit = 0;
+    t->user_heap_base = 0;
+    t->user_heap_limit = 0;
 
     uint64_t *sp = &t->stack[TASK_STACK_QWORDS];
     sp -= 22;
@@ -57,15 +69,20 @@ void task_create(void (*entry)(void), int id) {
     t->rsp = (uint64_t)sp;
 }
 
-int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3) {
+int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3, uint64_t heap_base) {
     if (num_tasks >= MAX_TASKS) return -1;
     struct task *t = &tasks[num_tasks++];
     t->pid = next_pid++;
     t->id = t->pid;
     t->state = PROC_READY;
     t->is_user = 1;
-    t->kernel_rsp = (uint64_t)&t->stack[TASK_STACK_QWORDS]; /* per-process kernel stack */
+    t->kernel_rsp = (uint64_t)&t->stack[TASK_STACK_QWORDS];
     t->cr3 = cr3;
+    /* Phase 4: user memory regions */
+    t->user_stack_top = stack_top;
+    t->user_stack_limit = stack_top - PAGE_SIZE;  /* 1 page pre-mapped */
+    t->user_heap_base = heap_base;
+    t->user_heap_limit = heap_base;  /* empty heap initially */
 
     uint64_t *sp = &t->stack[TASK_STACK_QWORDS];
     sp -= 22;
@@ -85,6 +102,13 @@ void proc_terminate(int pid) {
     for (int i = 0; i < num_tasks; i++) {
         if (tasks[i].pid == pid) {
             tasks[i].state = PROC_TERMINATED;
+            /* Phase 4: free dynamically allocated pages (stack + heap) */
+            if (tasks[i].is_user && tasks[i].cr3) {
+                free_user_pages(tasks[i].cr3,
+                    USER_STACK_BASE, tasks[i].user_stack_top);
+                free_user_pages(tasks[i].cr3,
+                    USER_HEAP_BASE, USER_HEAP_MAX);
+            }
             return;
         }
     }
@@ -92,6 +116,15 @@ void proc_terminate(int pid) {
 
 int proc_current_pid(void) {
     return sched_current->pid;
+}
+
+int count_active_user_procs(void) {
+    int count = 0;
+    for (int i = 0; i < num_tasks; i++) {
+        if (tasks[i].state == PROC_READY && tasks[i].is_user)
+            count++;
+    }
+    return count;
 }
 
 void sched_tick(void) {

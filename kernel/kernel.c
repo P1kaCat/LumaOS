@@ -144,9 +144,35 @@ void kernel_main(struct lumaos_handoff *ho) {
     __asm__ volatile ("sti");
 
     serial_puts("\n[*] Setting up user processes (Ring 3)...\n");
-    serial_puts("[+] Paging: kernel isolated, user @0x800000\n");
-    user_init(); /* creates 2 user processes, returns */
+    serial_puts("[+] Paging: kernel isolated, user @0x800000, stack @0xC00000, heap @0x1000000\n");
+
+    uint64_t pages_before = count_free_pages();
+    user_init(); /* creates 2 user processes */
+    uint64_t pages_after_init = count_free_pages();
+    serial_puts("  Free pages: before=");
+    serial_puts(uitoa(pages_before, buf));
+    serial_puts(" after_init=");
+    serial_puts(uitoa(pages_after_init, buf));
+    serial_puts("\n");
 
     serial_puts("[+] Scheduler running (kernel tasks + 2 user processes)\n");
-    for (;;) __asm__ volatile ("hlt");
+
+    /* Wait for all user processes to terminate, then check for page leaks */
+    int cleanup_test_done = 0;
+    for (;;) {
+        __asm__ volatile ("hlt");
+        if (!cleanup_test_done && count_active_user_procs() == 0) {
+            cleanup_test_done = 1;
+            uint64_t pages_final = count_free_pages();
+            serial_puts("\n[*] All user processes terminated\n");
+            serial_puts("  Free pages: ");
+            serial_puts(uitoa(pages_final, buf));
+            if (pages_final >= pages_before) {
+                serial_puts(" (>= initial — no leak, OK)\n");
+            } else {
+                serial_puts(" (< initial — LEAK!)\n");
+            }
+            serial_puts("[+] Phase 4 complete: protection, cleanup, heap, lazy alloc, stack\n");
+        }
+    }
 }

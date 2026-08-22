@@ -1,4 +1,6 @@
-/* mem.c — Paging (4-level, 2MB pages) + bump heap allocator */
+/* mem.c — Paging (4-level, 2MB pages) + heap allocator + page allocator + dynamic mapping
+ * Phase 4: dynamic page mapping, page cleanup on termination
+ */
 #include "mem.h"
 
 #define COM1 0x3F8
@@ -50,9 +52,11 @@ void paging_init(void) {
     serial_puts("[+] Paging: kernel supervisor-only, user @0x800000 (2MB pages)\n");
 }
 
-/* Phase 3: create per-process page tables.
+/* Phase 3+4: create per-process page tables.
    Maps virtual 0x800000 (2MB user page) to user_phys_addr.
    Kernel space (0-1GB minus user page) is shared supervisor-only.
+   Stack region (PD[0][5] = 0xA00000) and heap region (PD[0][8-9] = 0x1000000)
+   are left NOT PRESENT for lazy 4KB mapping.
    Returns physical address of the new PML4. */
 uint64_t create_user_pml4(int idx, uint64_t user_phys_addr) {
     if (idx < 0 || idx >= MAX_PROCS) return 0;
@@ -67,13 +71,21 @@ uint64_t create_user_pml4(int idx, uint64_t user_phys_addr) {
     proc_pdpt[idx][2] = (uint64_t)pd[2] | 0x03;
     proc_pdpt[idx][3] = (uint64_t)pd[3] | 0x03;
 
-    /* PD[0][0-511]: all supervisor-only except [4] = user page */
+    /* PD[0][0-511]: supervisor-only 2MB pages, except:
+   *   [4] = user code page (2MB, user-accessible)
+   *   [5] = stack region (NOT PRESENT — lazy 4KB mapping)
+   *   [8,9] = heap region (NOT PRESENT — lazy 4KB mapping)
+   */
     for (int j = 0; j < 512; j++) {
-        uint64_t addr = (uint64_t)j * 0x200000ULL;
-        proc_pd[idx][j] = addr | ((j == 4) ? 0x87 : 0x83);
+        if (j == 5 || j == 8 || j == 9) {
+            proc_pd[idx][j] = 0;  /* not present — lazy allocation */
+        } else if (j == 4) {
+            proc_pd[idx][j] = user_phys_addr | 0x87;  /* user code page */
+        } else {
+            uint64_t addr = (uint64_t)j * 0x200000ULL;
+            proc_pd[idx][j] = addr | 0x83;  /* supervisor-only 2MB page */
+        }
     }
-    /* Override: map virtual 0x800000 to the process's physical page */
-    proc_pd[idx][4] = user_phys_addr | 0x87;
 
     return (uint64_t)proc_pml4[idx];
 }
@@ -131,6 +143,7 @@ void kfree(void *ptr) {
     /* Bump allocator — no free for now */
     (void)ptr;
 }
+
 /* ===== Page Allocator (4KB pages, bitmap) ===== */
 #define MAX_PAGES 32768  /* 128MB / 4KB */
 static uint8_t page_bitmap[MAX_PAGES / 8];  /* 4096 bytes */
@@ -309,4 +322,61 @@ uint64_t get_page(uint64_t cr3, uint64_t va) {
     return *pte;
 }
 
-/* force rebuild */
+/* ===== Page Cleanup (Phase 4) ===== */
+
+/* Free all dynamically mapped 4KB pages (data pages + intermediate PT pages)
+   in a VA range. Skips 2MB large pages (kernel supervisor mappings).
+   Called on process termination to clean up stack/heap. */
+void free_user_pages(uint64_t cr3, uint64_t va_start, uint64_t va_end) {
+    uint64_t *pml4_tbl = (uint64_t *)(unsigned long)cr3;
+
+    for (uint64_t va = va_start; va < va_end; ) {
+        uint64_t idx4 = (va >> 39) & 0x1FF;
+        uint64_t idx3 = (va >> 30) & 0x1FF;
+        uint64_t idx2 = (va >> 21) & 0x1FF;
+
+        /* PML4 */
+        if (!(pml4_tbl[idx4] & PTE_PRESENT)) {
+            va = ((va >> 39) + 1) << 39;
+            continue;
+        }
+        uint64_t *pdpt_tbl = (uint64_t *)(unsigned long)(pml4_tbl[idx4] & ~0xFFFULL);
+
+        /* PDPT */
+        if (!(pdpt_tbl[idx3] & PTE_PRESENT)) {
+            va = ((va >> 30) + 1) << 30;
+            continue;
+        }
+        if (pdpt_tbl[idx3] & PTE_PS) {
+            va = ((va >> 30) + 1) << 30;  /* 1GB page — skip */
+            continue;
+        }
+        uint64_t *pd_tbl = (uint64_t *)(unsigned long)(pdpt_tbl[idx3] & ~0xFFFULL);
+
+        /* PD */
+        if (!(pd_tbl[idx2] & PTE_PRESENT)) {
+            va = ((va >> 21) + 1) << 21;
+            continue;
+        }
+        if (pd_tbl[idx2] & PTE_PS) {
+            va = ((va >> 21) + 1) << 21;  /* 2MB page — skip */
+            continue;
+        }
+
+        /* 4KB PT — walk all 512 entries, free data pages */
+        uint64_t pt_phys = pd_tbl[idx2] & ~0xFFFULL;
+        uint64_t *pt = (uint64_t *)(unsigned long)pt_phys;
+        for (int i = 0; i < 512; i++) {
+            if (pt[i] & PTE_PRESENT) {
+                uint64_t pa = pt[i] & ~0xFFFULL;
+                free_page(pa);
+                pt[i] = 0;
+            }
+        }
+        /* Free the PT page itself (allocated by walk_pt) */
+        free_page(pt_phys);
+        pd_tbl[idx2] = 0;
+
+        va = ((va >> 21) + 1) << 21;
+    }
+}

@@ -1,8 +1,10 @@
 /*
  * cpu.c — GDT (7 entries), IDT (+syscall), TSS, PIC, handlers
+ * Phase 4: lazy allocation, stack growth, sbrk syscall
  */
 #include "cpu.h"
 #include "sched.h"
+#include "mem.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -220,7 +222,8 @@ void irq_default_handler(uint8_t irq) {
     pic_eoi(irq);
 }
 
-/* Syscall handler: RAX=number, RDI=arg1, RSI=arg2 */
+/* ===== Syscall handler ===== */
+/* RAX=number, RDI=arg1, RSI=arg2 */
 void syscall_handler(struct registers *regs) {
     switch (regs->rax) {
         case 0: /* write_serial(ptr, len) */
@@ -241,12 +244,31 @@ void syscall_handler(struct registers *regs) {
         case 2: /* getpid() */
             regs->rax = (uint64_t)proc_current_pid();
             break;
+        case 3: /* sbrk(increment) — extend heap, return old limit */
+            {
+                int64_t incr = (int64_t)regs->rdi;
+                uint64_t old_limit = sched_current->user_heap_limit;
+                if (incr == 0) {
+                    regs->rax = old_limit;
+                    break;
+                }
+                uint64_t new_limit = old_limit + (uint64_t)incr;
+                if (new_limit < sched_current->user_heap_base ||
+                    new_limit > USER_HEAP_MAX) {
+                    regs->rax = (uint64_t)-1;
+                    break;
+                }
+                sched_current->user_heap_limit = new_limit;
+                regs->rax = old_limit;
+            }
+            break;
         default:
             regs->rax = (uint64_t)-1;
             break;
     }
 }
 
+/* ===== ISR handler ===== */
 void isr_handler(struct registers *regs) {
     if (regs->int_no < 32) {
         /* Phase 4: kernel-mode page fault recovery for map/unmap test.
@@ -263,11 +285,56 @@ void isr_handler(struct registers *regs) {
             }
             /* CR2 mismatch — unexpected kernel PF, fall through to handler */
         }
-        /* Intercept Ring 3 page fault — expected isolation test */
+
+        /* Phase 4: Ring 3 page fault — lazy allocation or terminate */
         if (regs->int_no == 14 && (regs->err_code & 4)) {
             uint64_t cr2;
             __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
             char buf[32];
+
+            /* Not-present fault — try lazy allocation */
+            if (!(regs->err_code & 1)) {
+                struct task *t = (struct task *)sched_current;
+
+                if (t->is_user) {
+                    /* Heap lazy allocation */
+                    if (cr2 >= t->user_heap_base && cr2 < t->user_heap_limit) {
+                        uint64_t pa = alloc_page();
+                        if (pa) {
+                            int r = map_page(t->cr3, cr2 & ~0xFFFULL, pa,
+                                             PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+                            if (r == 0) {
+                                __asm__ volatile("invlpg (%0)" : : "r"(cr2 & ~0xFFFULL) : "memory");
+                                return;  /* resume faulting instruction */
+                            }
+                            free_page(pa);  /* map failed, reclaim page */
+                        }
+                    }
+
+                    /* Stack growth — fault below current stack_limit */
+                    if (cr2 >= USER_STACK_BASE && cr2 < t->user_stack_limit) {
+                        uint64_t va = cr2 & ~0xFFFULL;
+                        int ok = 1;
+                        while (va < t->user_stack_limit) {
+                            uint64_t pa = alloc_page();
+                            if (!pa) { ok = 0; break; }
+                            int r = map_page(t->cr3, va, pa,
+                                             PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+                            if (r != 0) { free_page(pa); ok = 0; break; }
+                            __asm__ volatile("invlpg (%0)" : : "r"(va) : "memory");
+                            va += PAGE_SIZE;
+                        }
+                        if (ok) {
+                            t->user_stack_limit = cr2 & ~0xFFFULL;
+                            return;  /* resume faulting instruction */
+                        }
+                        /* Partial failure — fall through to terminate.
+                           Mapped pages will be freed by proc_terminate. */
+                    }
+                }
+            }
+
+            /* Protection violation, out-of-range, or OOM — terminate */
             serial_puts("\n[+] Page fault in Ring 3 (CR2=0x");
             serial_puts(uxtoa(cr2, buf));
             serial_puts(")\n");
@@ -278,6 +345,7 @@ void isr_handler(struct registers *regs) {
             __asm__ volatile ("sti");
             for (;;) __asm__ volatile ("hlt");
         }
+
         exception_handler(regs->int_no, regs->err_code);
     }
     else if (regs->int_no == 128)
