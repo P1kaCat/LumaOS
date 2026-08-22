@@ -1,59 +1,98 @@
-# LumaOS
+<p align="center">
+  <img src="assets/logo.png" alt="LumaOS Logo" width="220">
+</p>
 
-> Un PC qui se comporte comme une console.
+<h1 align="center">LumaOS</h1>
 
-LumaOS est un système d'exploitation PC entièrement pensé pour le gaming. Son objectif n'est pas de remplacer Windows pour la bureautique, mais de faire tourner des jeux PC modernes avec le moins d'overhead système possible tout en offrant une expérience utilisateur extrêmement simple.
+<p align="center">
+  <strong>A gaming-first operating system built from scratch.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/P1kaCat/LumaOS">Repository</a>
+  ·
+  <a href="ROADMAP.md">Roadmap</a>
+  ·
+  <a href="MEMORY.md">Technical Memory</a>
+</p>
+
+---
+
+## About
+
+LumaOS is an experimental x86_64 operating system built from scratch
+with one goal in mind:
+
+> **Build an operating system that feels more like a gaming console than a traditional PC.**
+
+Instead of trying to reproduce the complexity of Windows or Linux,
+LumaOS is designed around a different philosophy:
+
+**gaming first, simplicity first, performance first.**
+
+The project is currently in early development and runs inside QEMU/OVMF
+while its kernel and userspace are progressively being built.
+
+---
 
 ## Vision
 
-- Démarrer directement sur une interface de type console
-- Aucune exposition inutile à la complexité d'un OS PC traditionnel
-- Interface entièrement navigable à la manette, clavier et souris
-- Identité audiovisuelle propre (musiques d'ambiance, sons de navigation, animations)
-- Minimaliste, légère, fluide
+LumaOS aims to eventually provide a complete gaming-oriented environment
+that boots directly into a simple, controller-friendly interface.
 
-## Architecture
+The long-term experience is envisioned around:
 
-```
-                 Jeux / Applications
-                         │
-                         ▼
-             Gaming Runtime / APIs
-                         │
-                         ▼
-                 LumaOS Userland
-                         │
-                         ▼
-                   LumaOS Kernel
-                         │
-                         ▼
-             Hardware Abstraction Layer
-                         │
-             ┌───────────┼───────────┐
-             ▼           ▼           ▼
-            GPU         CPU         Devices
-             │
-             ▼
-          Hardware
-```
+- 🎮 Controller-first navigation
+- ⚡ Minimal system overhead
+- 🖥️ Console-like user experience
+- 🔊 Custom audio and audiovisual identity
+- 🚀 Fast boot and responsive system
+- 🧩 Native gaming APIs and runtime
+- 🔧 Direct control over hardware
+- 🛠️ A system built specifically around gaming
 
-Voir [ARCHITECTURE.md](ARCHITECTURE.md) pour les détails.
+LumaOS is **not intended to become another general-purpose desktop OS**.
 
-## Roadmap
+Every major component should answer one question:
 
-Le développement suit une approche progressive. Voir [ROADMAP.md](ROADMAP.md) pour le roadmap complet.
+> **Does this help the gaming experience?**
 
-**Première milestone :**
-```
-UEFI → Bootloader → Kernel → Framebuffer → Shell → Home → Musique → Animations → Navigation
-```
+---
 
-## Philosophie
+## Current Status
 
-- **Ne pas recréer Windows.** Chaque composant doit répondre à la question : est-ce nécessaire pour le gaming ?
-- **IA-first.** Pendant la phase expérimentale, le développement est réalisé avec l'aide de l'IA.
-- **Commencer petit.** D'abord fonctionner dans un environnement contrôlé (QEMU), puis évoluer vers du matériel réel.
+LumaOS is currently in **Phase 5 — Syscalls & Userland**.
 
-## Statut
+The kernel already supports:
 
-Projet personnel expérimental. Pas de distribution publique prévue dans l'immédiat.
+- UEFI boot
+- ELF kernel loading
+- x86_64 long mode
+- GDT / IDT / TSS
+- PIC
+- Paging
+- Kernel/user memory isolation
+- Ring 3 user processes
+- Per-process address spaces
+- CR3 switching
+- Kernel stacks
+- Physical page allocation
+- Dynamic page mapping
+- Lazy user memory allocation
+- Dynamic user stacks
+- Kernel heap
+- Preemptive scheduling
+- PIT timer
+- Keyboard input
+- System calls
+- Userland shell
+- Process termination and memory cleanup
+
+The current shell provides basic commands such as:
+
+```text
+help
+pid
+mem
+sleep N
+exit
