@@ -4,6 +4,22 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 
 ---
 
+## CI/CD
+**Status: ✅ Operational**
+
+- [x] GitHub Actions workflow (`.github/workflows/build.yml`)
+- [x] Build job: `make clean && make` on `ubuntu-22.04` with `clang + lld`
+- [x] Artifact verification: `kernel.elf`, `BOOTX64.EFI`, `disk.img`
+- [x] QEMU boot test: headless `-display none`, `-no-reboot`
+- [x] Serial output capture via `-serial file:serial.log`
+- [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
+- [x] Boot marker verification: `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`, `Phase 4+5 regression test passed`
+- [x] Serial log artifact upload on failure
+
+Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection)
+
+---
+
 ## Phase 0 — Foundations
 **Status: ✅ Completed**
 
@@ -97,9 +113,9 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 **Status: ✅ Completed**
 
 ### Syscall API
-- [x] Stable syscall table
-- [x] `write`, `read`, `exit`, `getpid`
-- [x] `sbrk`, `sleep`, `yield`, `getpages`
+- [x] Stable syscall table (IDs 0–7)
+- [x] `write(0)`, `read(1)`, `exit(2)`, `getpid(3)`
+- [x] `sbrk(4)`, `sleep(5)`, `yield(6)`, `getpages(7)`
 - [x] Unknown syscall handling (`-1`)
 - [x] Error-return validation
 
@@ -108,8 +124,9 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] Scancode Set 1
 - [x] 256-byte keyboard ring buffer
 - [x] Scancode → character conversion
-- [x] Native French AZERTY layout
+- [x] Native French AZERTY layout (two tables: unshifted + shifted)
 - [x] Shift handling and AZERTY special characters
+- [x] `$` escape sequence warning fix
 
 ### Scheduler & timing
 - [x] `SLEEPING` task state
@@ -130,7 +147,7 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 ### Regression testing
 - [x] Phase 4 regression tests
 - [x] Shell termination test
-- [x] User page leak fix
+- [x] User page leak fix (free_user_pages frees stack data + PT page)
 - [x] `free pages: before == final`
 - [x] Full Phase 4 + Phase 5 QEMU validation
 
@@ -142,45 +159,45 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 ---
 
 ## Phase 6 — Filesystem & Storage
-**Status: ⬜ Not started**
+**Status: 🔄 In Progress**
 
 ### Layered architecture
 ```
 Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
 ```
 
-### Block device layer
-- [ ] Block device abstraction (`struct block_device`)
-- [ ] ATA/IDE PIO driver (port I/O, LBA28)
-- [ ] Sector read (512 bytes)
-- [ ] Sector read test in QEMU
+### Block device layer — ✅ Done
+- [x] ATA/IDE PIO driver (`ata.c`/`ata.h`, LBA28, polled mode)
+- [x] `ata_init()`: IDENTIFY, sector count detection
+- [x] `ata_read_sector()`: PIO read 512 bytes
+- [x] Sector read test in QEMU (boot signature 0x55AA)
+- [x] Disk image generator (`tools/create_disk.py`, 64MB FAT32)
 
-### VFS layer
+### FAT32 layer — ✅ Done
+- [x] Packed on-disk structures (BPB + dir entry)
+- [x] `fat32_init()`: BPB parsing, layout computation
+- [x] `fat32_read_cluster()`: cluster read via ATA sectors
+- [x] `fat32_next_cluster()`: FAT chain walk (one-sector cache)
+- [x] `fat32_list_root()`: root directory listing with callback
+- [x] 8.3 short name parsing
+- [x] QEMU validation (HELLO.TXT, TEST.TXT listed)
+
+### VFS layer — ⬜ Not started
 - [ ] Minimal VFS abstraction
-- [ ] File table (per-process file descriptors)
-- [ ] `open()`, `close()`, `read()` VFS operations
+- [ ] File descriptor table (per-process)
+- [ ] `vfs_open()`, `vfs_close()`, `vfs_read()`
 
-### FAT32 layer
-- [ ] FAT32 read-only support
-- [ ] Boot sector / BPB parsing
-- [ ] FAT table walk
-- [ ] Directory entry parsing (8.3 short names)
-- [ ] File lookup by path
-- [ ] Cluster chain read
-
-### Syscalls
-- [ ] `open(path)` → fd
-- [ ] `close(fd)`
-- [ ] `read(fd, buf, len)` → bytes read
+### Syscalls — ⬜ Not started
+- [ ] `open(path)` → fd (syscall 8)
+- [ ] `close(fd)` (syscall 9)
+- [ ] `read(fd, buf, len)` → bytes read (syscall 10)
 - [ ] Error codes: file not found, bad fd, etc.
 
-### Foundation
-- [ ] Load user program from file (ELF or raw binary)
-- [ ] QEMU disk image with FAT32 partition
+### Userland — ⬜ Not started
+- [ ] `cat hello.txt` shell command
+- [ ] File-based user program loader
 
 ---
-
-
 
 ## Phase 7 — Drivers
 **Status: ⬜ Not started**
