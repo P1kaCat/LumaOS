@@ -250,10 +250,9 @@ void isr_handler(struct registers *regs) {
             uint64_t cr2;
             __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
             char buf[32];
-            serial_puts("\n[+] Phase 2: Page-level isolation PASS\n");
-            serial_puts("[+] Ring 3 tried to access 0x");
+            serial_puts("\n[+] Page fault in Ring 3 (CR2=0x");
             serial_puts(uxtoa(cr2, buf));
-            serial_puts(" — page fault (expected)\n");
+            serial_puts(")\n");
             serial_puts("[+] Process PID=");
             serial_puts(uitoa(proc_current_pid(), buf));
             serial_puts(" terminated (page fault)\n");
