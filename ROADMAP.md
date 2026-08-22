@@ -65,7 +65,7 @@
 ---
 
 ## Phase 4 — Mémoire virtuelle avancée
-**Statut : 🔄 En cours**
+**Statut : ✅ Terminé**
 
 ### Page allocation
 - [x] Page allocator physique 4 KB
@@ -88,30 +88,29 @@
 - [x] CR3 séparé par processus
 - [x] Page tables par processus
 - [x] Protection inter-processus
-- [ ] Protection mémoire complète par processus (test accès kernel → PF)
-- [ ] Libération des pages d'un processus à sa terminaison
+- [x] Protection mémoire complète par processus (test accès kernel → PF)
+- [x] Libération des pages d'un processus à sa terminaison (free_user_pages, no leak)
 
 ### Mémoire utilisateur
-- [ ] Heap utilisateur (région dédiée, syscall `sbrk`)
-- [ ] Allocation dynamique userland
-- [ ] Mapping de pages utilisateur à la demande (lazy allocation)
-- [ ] Page fault utilisateur exploitable (not-present vs protection)
-- [ ] Stack utilisateur dynamique (région séparée, croissance par PF)
+- [x] Heap utilisateur (région dédiée 0x1000000, syscall `sbrk`)
+- [x] Allocation dynamique userland (sbrk + lazy mapping)
+- [x] Mapping de pages utilisateur à la demande (lazy allocation via PF handler)
+- [x] Page fault utilisateur exploitable (not-present vs protection violation)
+- [x] Stack utilisateur dynamique (région 0xA00000-0xC00000, croissance par PF)
 
 ---
 
 ## Phase 5 — Syscalls & Userland
-**Statut : ⬜ Non commencé**
+**Statut : 🔄 En cours**
 
 - [ ] API syscall stable
-- [ ] `write`
-- [ ] `read`
+- [ ] `write` (déjà partiellement implémenté)
+- [ ] `read` (clavier)
 - [x] `exit`
 - [ ] `sleep`
 - [x] `getpid`
 - [x] `sbrk` (Phase 4)
 - [ ] Gestion des erreurs syscall
-- [ ] Gestion des fichiers
 - [ ] Programme `init`
 - [ ] Shell minimal
 - [ ] Loader d'un programme user depuis un fichier
