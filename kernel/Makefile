@@ -2,14 +2,14 @@
 #
 # Usage : cd kernel && make [all|clean]
 #
-# Prérequis : LLVM/Clang + NASM + LLD dans le PATH
+# Prérequis : LLVM/Clang + LLD dans le PATH
+# Pas besoin de NASM — Clang assemble boot.S directement.
 
 BUILD_DIR := ../build/kernel
 
 # --- Toolchain ---
-CC   := clang
-NASM := nasm
-LD   := ld.lld
+CC := clang
+LD := ld.lld
 
 # Include path pour handoff.h
 INCLUDE := -I../include
@@ -19,8 +19,8 @@ KERNEL_CFLAGS := --target=x86_64-unknown-none -ffreestanding -nostdlib \
                  -O2 -Wall -Wextra -mno-red-zone -fno-pic -fno-stack-protector \
                  $(INCLUDE)
 
-# Flags NASM (ELF64)
-NASM_FLAGS := -f elf64
+# Flags compilation assembly (boot.S via Clang intégré)
+ASM_FLAGS := --target=x86_64-unknown-none -ffreestanding -nostdlib
 
 # Flags linkage (ELF64 avec linker script custom)
 KERNEL_LDFLAGS := -T linker.ld -nostdlib --oformat elf64-x86-64
@@ -43,9 +43,9 @@ $(KERNEL_OBJ): kernel.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
-$(BOOT_OBJ): boot.asm
+$(BOOT_OBJ): boot.S
 	@mkdir -p $(BUILD_DIR)
-	$(NASM) $(NASM_FLAGS) -o $@ boot.asm
+	$(CC) $(ASM_FLAGS) -c boot.S -o $@
 
 clean:
 	@rm -rf $(BUILD_DIR)
