@@ -94,13 +94,6 @@ static uint64_t heap_size = 0;
 static uint64_t heap_next = 0;
 static uint64_t heap_allocs = 0;
 
-    uint32_t type;
-    uint32_t _pad;
-    uint64_t physical_start;
-    uint64_t virtual_start;
-    uint64_t number_of_pages;
-};
-
 void heap_init(struct lumaos_handoff *ho) {
     uint8_t *mmap = (uint8_t *)(unsigned long)ho->memory_map;
     uint64_t mmap_size = ho->memory_map_size;
