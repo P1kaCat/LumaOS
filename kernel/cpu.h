@@ -45,6 +45,7 @@ struct tss {
 void tss_init(void);
 struct registers;
 void syscall_handler(struct registers *regs);
+void serial_puts(const char *s);
 
 void gdt_init(void);
 
