@@ -66,6 +66,14 @@ The complete project status, completed milestones, current work, and future plan
 
 ---
 
+## Installation
+
+For full setup details, prerequisites, and build instructions, see **[Quick Start](#quick-start)** below and the **[Toolchain Guide](TOOLCHAIN.md)**.
+
+The complete list of functional and non-functional requirements is available in **[Requirements](requirements.md)** — covering all phases (0–12), the syscall ABI, memory layout, filesystem architecture, and CI/CD validation criteria.
+
+---
+
 ## Quick Start
 
 ### Requirements
@@ -100,6 +108,7 @@ LumaOS currently boots through **UEFI/OVMF** and runs inside **QEMU**.
 | [Architecture](ARCHITECTURE.md) | System architecture and core design |
 | [Toolchain](TOOLCHAIN.md) | Compiler, assembler, linker, firmware, and development tools |
 | [Contributing](CONTRIBUTING.md) | Development and contribution guidelines |
+| [Requirements](requirements.md) | Functional & non-functional requirements, syscall ABI, memory layout |
 | [Technical Memory](MEMORY.md) | Detailed notes on the current low-level implementation |
 | [License](LICENSE) | LumaOS Community License v1.0 |
 
