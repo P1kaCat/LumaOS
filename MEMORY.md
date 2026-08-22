@@ -6,108 +6,142 @@ OS monocœur x86_64, long mode, identity mapping.
 
 - **Bootloader** : UEFI (OVMF) → charge `kernel.elf` à `0x100000`, handoff struct (framebuffer + memory map)
 - **Kernel** : freestanding, linked à `0x100000`, pas de higher-half
-- **Paging** :
-  - 4-level page tables
-  - Initial kernel mapping en 2MB pages
-  - 4GB identity-mapped
-  - Pages kernel : supervisor-only (`0x83`)
-  - Région user : `0x800000`
-  - User pages : U/S (`0x87`)
-  - PML4/PDPT nécessaires accessibles depuis Ring 3
-  - Page tables séparées par processus via CR3
-  - Mapping dynamique de pages 4KB en cours d'intégration
-- **Page allocator** :
-  - Allocation physique par pages de 4KB
-  - `alloc_page()`
-  - `free_page()`
-  - Réutilisation des pages libérées validée en QEMU
-- **Heap kernel** :
-  - Bump allocator `kmalloc()`
-  - Pas encore de `free()`
-- **Scheduler** :
-  - Round-robin préemptif
-  - PIT 50Hz
-  - `MAX_TASKS=8`
-  - `struct task` contient notamment :
-    - `rsp`
-    - `pid`
-    - `state`
-    - `is_user`
-    - `cr3`
-    - `kernel_rsp`
-  - Context switch en assembly (`isr.S`)
-  - `iretq` pour Ring 0 et Ring 3
-- **Processus** :
-  - PID unique par processus
-  - Création/terminaison
-  - Plusieurs processus simultanés
-  - CR3 propre à chaque processus
-  - Page tables propres à chaque processus
-  - Kernel stack propre à chaque processus
-  - Isolation inter-processus validée par page fault
-- **User mode** :
-  - Ring 3 via `iretq`
-  - CS=`0x1B`
-  - SS=`0x23`
-  - RSP user séparé
-  - User code position-independent
-  - Code copié à `0x800000`
-  - Stack user à `0xA00000`
-- **Syscalls** :
-  - `int 0x80`
-  - Vector 128
-  - DPL=3
-  - `0 = write_serial(ptr, len)`
-  - `1 = exit()`
-  - `2 = getpid()`
-- **Exceptions** :
-  - Page fault (#14) géré
-  - Page fault Ring 3 → terminaison du processus
-  - Page fault attendu utilisé pour les tests d'isolation
+
+### Paging
+
+- 4-level page tables
+- Initial kernel mapping en 2MB pages
+- 4GB identity-mapped
+- Pages kernel : supervisor-only (`0x83`)
+- Région user : `0x800000`
+- User pages : U/S (`0x87`)
+- Page tables séparées par processus via CR3
+- Mapping dynamique de pages 4KB
+- `invlpg` après modification des mappings
+- Page fault utilisateur distinguant :
+  - page absente → lazy allocation
+  - violation de protection → terminaison du processus
+
+### Page allocator
+
+- Allocation physique par pages de 4KB
+- `alloc_page()`
+- `free_page()`
+- Réutilisation des pages libérées validée en QEMU
+- `count_free_pages()`
+
+### Heap kernel
+
+- Bump allocator `kmalloc()`
+- Pas encore de `free()`
+
+### Mémoire utilisateur
+
+- Heap user à `0x1000000`
+- `sbrk()` pour modifier le break utilisateur
+- Lazy allocation du heap via page fault
+- Stack user dans la région `0xA00000-0xC00000`
+- Croissance dynamique de la stack via page fault
+- Libération des pages user à la terminaison
+- Test de fuite mémoire présent
+
+### Scheduler
+
+- Round-robin préemptif
+- PIT 50Hz
+- `system_ticks`
+- `MAX_TASKS=8`
+- États :
+  - `READY`
+  - `RUNNING`
+  - `SLEEPING`
+  - `TERMINATED`
+- `sleep(ticks)` avec réveil automatique
+- `yield()` pour forcer un changement de tâche
+- Context switch en assembly (`isr.S`)
+- `iretq` pour Ring 0 et Ring 3
+
+`struct task` contient notamment :
+- `rsp`
+- `pid`
+- `state`
+- `is_user`
+- `cr3`
+- `kernel_rsp`
+
+### Processus
+
+- PID unique pour les processus user
+- Création / terminaison
+- Plusieurs processus simultanés
+- CR3 propre à chaque processus
+- Page tables propres à chaque processus
+- Kernel stack propre à chaque processus
+- Isolation inter-processus validée
+- Page fault inter-processus vérifié
+- `proc_terminate()` distingue les processus user des kernel tasks afin d'éviter les collisions de PID
+
+### User mode
+
+- Ring 3 via `iretq`
+- CS=`0x1B`
+- SS=`0x23`
+- RSP user séparé
+- User code position-independent
+- Code copié à `0x800000`
+- Stack user à `0xA00000`
+- Shell interactif actuellement exécuté en Ring 3
 
 ---
 
-## Toolchain
+## Syscalls
 
-- Compilateur : Clang/LLVM (`--target=x86_64-unknown-none`)
-- Linker : `ld.lld`
-- Assembleur : Clang integrated assembler (AT&T syntax)
-  - `boot.S`
-  - `isr.S`
-  - `user_code.S`
-- Pas de NASM
-- QEMU : `qemu-system-x86_64`
-- Firmware : OVMF / UEFI
-- Build via GNU Make
+Interface actuelle via `int 0x80`, vector 128, DPL=3.
+
+| ID | Syscall | Fonction |
+|---:|---|---|
+| `0` | `write` | Écrit vers la sortie série |
+| `1` | `exit` | Termine le processus |
+| `2` | `getpid` | Retourne le PID courant |
+| `3` | `sbrk` | Modifie le break du heap user |
+| `4` | `read` | Lit le buffer clavier, non bloquant |
+| `5` | `sleep` | Endort le processus pendant N ticks |
+| `6` | `yield` | Force un changement de tâche |
+| `7` | `getpages` | Retourne le nombre de pages physiques libres |
+
+- Syscall inconnu → `-1`
+- `sleep` : 50 ticks ≈ 1 seconde
+- `read` : non bloquant, retourne `0` si aucune donnée disponible
+- Le userland utilise `yield()` pour éviter le busy loop lors du polling clavier
 
 ---
 
-## Structure du projet
+## Clavier
+
+- IRQ clavier activée
+- Scancode Set 1
+- Ring buffer de 256 octets
+- Conversion scancode → ASCII
+- Layout actuellement en cours d'adaptation vers **AZERTY français**
+- Le système a initialement utilisé une table US QWERTY
+- Support Shift / caractères spéciaux encore à finaliser
+
+### Important
+
+Le clavier physique de développement est **AZERTY**.
+
+Le mapping clavier de LumaOS doit donc être pensé indépendamment du layout clavier de Windows/QEMU et utiliser une table AZERTY native pour les scancodes Set 1.
+
+---
+
+## Shell userland
+
+Programme actuel dans `user_code.S`.
+
+Affichage au démarrage :
 
 ```text
-boot/efi/
-  efi_main.c          Bootloader UEFI
-  efi_types.h         Types EFI
-  elf.h               Structures ELF
+LumaOS Shell v0.1
+Type 'help' for commands
 
-include/
-  handoff.h            Structure handoff bootloader → kernel
-
-kernel/
-  boot.S               Entry point + stack setup
-  kernel.c             Kernel main + framebuffer + init sequence
-  cpu.c                GDT, IDT, TSS, PIC, exceptions, syscalls
-  cpu.h                Déclarations CPU / serial
-  isr.S                ISR stubs + context switching
-  mem.c                Paging + heap + page allocator + mappings
-  sched.c              Scheduler + process abstraction
-  sched.h              Tasks + process API
-  user.c               Création et initialisation des processus user
-  user_code.S          Programme user position-independent
-  linker.ld            Linker script (kernel à 0x100000)
-
-tools/ovmf/
-  OVMF_CODE.fd         Firmware UEFI
-  OVMF_VARS.fd         Variables UEFI
-
-Makefile                Build root + lancement QEMU
+>
