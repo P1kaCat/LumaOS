@@ -1,6 +1,7 @@
 /*
  * cpu.c — GDT (7 entries), IDT (+syscall), TSS, PIC, handlers
  * Phase 4: lazy allocation, stack growth, sbrk syscall
+ * Phase 5: keyboard ASCII, read/sleep/yield/getpages syscalls, error handling
  */
 #include "cpu.h"
 #include "sched.h"
@@ -22,16 +23,40 @@ static char *uxtoa(uint64_t n, char *buf) {
     int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
 }
 
-/* ===== GDT (7 entries: null, kcode, kdata, ucode, udata, TSS low, TSS high) ===== */
+/* ===== Keyboard (Phase 5) ===== */
+#define KB_BUF_SIZE 256
+static char kb_buffer[KB_BUF_SIZE];
+static int kb_head = 0;
+static int kb_tail = 0;
+
+/* Set 1 scancode → ASCII (US QWERTY, lowercase only) */
+static const char scancode_map[128] = {
+    [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4',
+    [0x06] = '5', [0x07] = '6', [0x08] = '7', [0x09] = '8',
+    [0x0A] = '9', [0x0B] = '0', [0x0C] = '-', [0x0D] = '=',
+    [0x0E] = '\b', [0x0F] = '\t',
+    [0x10] = 'q', [0x11] = 'w', [0x12] = 'e', [0x13] = 'r',
+    [0x14] = 't', [0x15] = 'y', [0x16] = 'u', [0x17] = 'i',
+    [0x18] = 'o', [0x19] = 'p', [0x1A] = '[', [0x1B] = ']',
+    [0x1C] = '\n',
+    [0x1E] = 'a', [0x1F] = 's', [0x20] = 'd', [0x21] = 'f',
+    [0x22] = 'g', [0x23] = 'h', [0x24] = 'j', [0x25] = 'k',
+    [0x26] = 'l', [0x27] = ';', [0x28] = '\'',
+    [0x2C] = 'z', [0x2D] = 'x', [0x2E] = 'c', [0x2F] = 'v',
+    [0x30] = 'b', [0x31] = 'n', [0x32] = 'm',
+    [0x33] = ',', [0x34] = '.', [0x35] = '/',
+    [0x39] = ' ',
+};
+
+/* ===== GDT ===== */
 
 static struct gdt_entry gdt[7];
 static struct gdt_ptr   gdtr;
 struct tss tss;
 
-/* Phase 4: kernel-mode page fault recovery for map/unmap test */
 volatile uint64_t test_fault_addr = 0;
 volatile int test_fault_caught = 0;
-static uint64_t tss_stack[2048]; /* 16KB ring-0 stack for ring 3 transitions */
+static uint64_t tss_stack[2048];
 
 static void gdt_set_entry(int i, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
     gdt[i].limit_low      = limit & 0xFFFF;
@@ -43,21 +68,17 @@ static void gdt_set_entry(int i, uint32_t base, uint32_t limit, uint8_t access, 
 }
 
 void gdt_init(void) {
-    gdt_set_entry(0, 0, 0, 0, 0);                            /* Null */
-    gdt_set_entry(1, 0, 0xFFFFF, 0x9A, 0x0A);               /* Kernel code 64 */
-    gdt_set_entry(2, 0, 0xFFFFF, 0x92, 0x0C);               /* Kernel data */
-    gdt_set_entry(3, 0, 0xFFFFF, 0xFA, 0x0A);               /* User code 64 (DPL=3) */
-    gdt_set_entry(4, 0, 0xFFFFF, 0xF2, 0x0C);               /* User data (DPL=3) */
-
-    /* TSS descriptor (16 bytes = entries 5+6) */
+    gdt_set_entry(0, 0, 0, 0, 0);
+    gdt_set_entry(1, 0, 0xFFFFF, 0x9A, 0x0A);
+    gdt_set_entry(2, 0, 0xFFFFF, 0x92, 0x0C);
+    gdt_set_entry(3, 0, 0xFFFFF, 0xFA, 0x0A);
+    gdt_set_entry(4, 0, 0xFFFFF, 0xF2, 0x0C);
     uint64_t tss_base = (uint64_t)&tss;
     uint32_t tss_limit = sizeof(tss) - 1;
-    gdt_set_entry(5, (uint32_t)tss_base, tss_limit, 0x89, 0x00); /* TSS available 64-bit */
-    *(uint64_t *)&gdt[6] = tss_base >> 32;  /* upper 32 bits of base */
-
+    gdt_set_entry(5, (uint32_t)tss_base, tss_limit, 0x89, 0x00);
+    *(uint64_t *)&gdt[6] = tss_base >> 32;
     gdtr.limit = sizeof(gdt) - 1;
     gdtr.base  = (uint64_t)&gdt;
-
     __asm__ volatile (
         "lgdt %0\n"
         "mov $0x10, %%ax\n"
@@ -77,9 +98,8 @@ void gdt_init(void) {
 }
 
 void tss_init(void) {
-    /* Zero TSS */
     for (int i = 0; i < (int)(sizeof(tss)/8); i++) ((uint64_t*)&tss)[i] = 0;
-    tss.rsp0 = (uint64_t)&tss_stack[2048]; /* ring-0 stack top */
+    tss.rsp0 = (uint64_t)&tss_stack[2048];
     __asm__ volatile ("ltr %0" : : "r"((uint16_t)0x28));
     char buf[32];
     serial_puts("[+] TSS loaded (RSP0=0x");
@@ -109,7 +129,7 @@ extern void irq6(void);  extern void irq7(void);  extern void irq8(void);
 extern void irq9(void);  extern void irq10(void); extern void irq11(void);
 extern void irq12(void); extern void irq13(void); extern void irq14(void);
 extern void irq15(void);
-extern void isr128(void); /* syscall gate */
+extern void isr128(void);
 
 static void idt_set_entry(int i, void *handler, uint8_t flags) {
     uint64_t addr = (uint64_t)handler;
@@ -139,7 +159,6 @@ void idt_init(void) {
     };
     for (int i = 0; i < 16; i++)
         idt_set_entry(32 + i, irq_stubs[i], 0x8E);
-    /* Syscall gate: vector 128, DPL=3 */
     idt_set_entry(128, isr128, 0xEE);
     __asm__ volatile ("lidt %0" : : "m"(idtr));
     serial_puts("[+] IDT loaded (256 entries + syscall gate @128 DPL=3)\n");
@@ -204,33 +223,35 @@ static uint8_t inb(uint16_t port) {
     return v;
 }
 
-static uint64_t kbd_ticks = 0;
-
 void irq_default_handler(uint8_t irq) {
     if (irq == 0) {
         sched_tick();
     } else if (irq == 1) {
+        /* Phase 5: keyboard scancode → ASCII → ring buffer */
         uint8_t sc = inb(0x60);
-        kbd_ticks++;
-        char buf[32];
-        serial_puts("[kbd] scancode=0x");
-        serial_puts(uxtoa((uint64_t)sc, buf));
-        serial_puts(" (");
-        serial_puts(uitoa(kbd_ticks, buf));
-        serial_puts(")\n");
+        if (!(sc & 0x80) && sc < 128) {  /* make code only */
+            char c = scancode_map[sc];
+            if (c) {
+                int next_tail = (kb_tail + 1) % KB_BUF_SIZE;
+                if (next_tail != kb_head) {  /* buffer not full */
+                    kb_buffer[kb_tail] = c;
+                    kb_tail = next_tail;
+                }
+            }
+        }
     }
     pic_eoi(irq);
 }
 
-/* ===== Syscall handler ===== */
+/* ===== Syscall handler (Phase 5: stable API) ===== */
 /* RAX=number, RDI=arg1, RSI=arg2 */
 void syscall_handler(struct registers *regs) {
     switch (regs->rax) {
-        case 0: /* write_serial(ptr, len) */
+        case 0: /* write(fd, buf, len) */
             serial_puts((const char *)(unsigned long)regs->rdi);
-            regs->rax = regs->rsi; /* return byte count */
+            regs->rax = regs->rsi;
             break;
-        case 1: /* exit() */
+        case 1: /* exit(status) */
             {
                 char buf[32];
                 serial_puts("[+] Process PID=");
@@ -244,7 +265,7 @@ void syscall_handler(struct registers *regs) {
         case 2: /* getpid() */
             regs->rax = (uint64_t)proc_current_pid();
             break;
-        case 3: /* sbrk(increment) — extend heap, return old limit */
+        case 3: /* sbrk(increment) */
             {
                 int64_t incr = (int64_t)regs->rdi;
                 uint64_t old_limit = sched_current->user_heap_limit;
@@ -262,8 +283,40 @@ void syscall_handler(struct registers *regs) {
                 regs->rax = old_limit;
             }
             break;
+        case 4: /* read(buf, len) — non-blocking keyboard read */
+            {
+                char *ubuf = (char *)(unsigned long)regs->rdi;
+                uint64_t ulen = regs->rsi;
+                uint64_t nread = 0;
+                while (nread < ulen && kb_head != kb_tail) {
+                    ubuf[nread++] = kb_buffer[kb_head];
+                    kb_head = (kb_head + 1) % KB_BUF_SIZE;
+                }
+                regs->rax = nread;
+            }
+            break;
+        case 5: /* sleep(ticks) — suspend until system_ticks + ticks */
+            {
+                uint64_t ticks = regs->rdi;
+                if (ticks == 0) {
+                    sched_yield();
+                } else {
+                    sched_current->sleep_until = system_ticks + ticks;
+                    sched_current->state = SLEEPING;
+                    sched_yield();
+                }
+                regs->rax = 0;
+            }
+            break;
+        case 6: /* yield() — give up CPU time slice */
+            regs->rax = 0;
+            sched_yield();
+            break;
+        case 7: /* getpages() — return free page count */
+            regs->rax = count_free_pages();
+            break;
         default:
-            regs->rax = (uint64_t)-1;
+            regs->rax = (uint64_t)-1;  /* error: unknown syscall */
             break;
     }
 }
@@ -271,33 +324,26 @@ void syscall_handler(struct registers *regs) {
 /* ===== ISR handler ===== */
 void isr_handler(struct registers *regs) {
     if (regs->int_no < 32) {
-        /* Phase 4: kernel-mode page fault recovery for map/unmap test.
-           If test_fault_addr is set and CR2 matches, catch the fault,
-           skip the faulting instruction, and continue. */
         if (regs->int_no == 14 && test_fault_addr != 0 && !(regs->err_code & 4)) {
             uint64_t cr2;
             __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
             if (cr2 == test_fault_addr) {
                 test_fault_caught = 1;
                 test_fault_addr = 0;
-                regs->rip += 3;  /* skip 3-byte movq (%rax), %rax */
+                regs->rip += 3;
                 return;
             }
-            /* CR2 mismatch — unexpected kernel PF, fall through to handler */
         }
 
-        /* Phase 4: Ring 3 page fault — lazy allocation or terminate */
         if (regs->int_no == 14 && (regs->err_code & 4)) {
             uint64_t cr2;
             __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
             char buf[32];
 
-            /* Not-present fault — try lazy allocation */
             if (!(regs->err_code & 1)) {
                 struct task *t = (struct task *)sched_current;
 
                 if (t->is_user) {
-                    /* Heap lazy allocation */
                     if (cr2 >= t->user_heap_base && cr2 < t->user_heap_limit) {
                         uint64_t pa = alloc_page();
                         if (pa) {
@@ -305,13 +351,12 @@ void isr_handler(struct registers *regs) {
                                              PTE_PRESENT | PTE_WRITABLE | PTE_USER);
                             if (r == 0) {
                                 __asm__ volatile("invlpg (%0)" : : "r"(cr2 & ~0xFFFULL) : "memory");
-                                return;  /* resume faulting instruction */
+                                return;
                             }
-                            free_page(pa);  /* map failed, reclaim page */
+                            free_page(pa);
                         }
                     }
 
-                    /* Stack growth — fault below current stack_limit */
                     if (cr2 >= USER_STACK_BASE && cr2 < t->user_stack_limit) {
                         uint64_t va = cr2 & ~0xFFFULL;
                         int ok = 1;
@@ -326,15 +371,12 @@ void isr_handler(struct registers *regs) {
                         }
                         if (ok) {
                             t->user_stack_limit = cr2 & ~0xFFFULL;
-                            return;  /* resume faulting instruction */
+                            return;
                         }
-                        /* Partial failure — fall through to terminate.
-                           Mapped pages will be freed by proc_terminate. */
                     }
                 }
             }
 
-            /* Protection violation, out-of-range, or OOM — terminate */
             serial_puts("\n[+] Page fault in Ring 3 (CR2=0x");
             serial_puts(uxtoa(cr2, buf));
             serial_puts(")\n");

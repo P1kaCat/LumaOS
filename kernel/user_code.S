@@ -1,140 +1,352 @@
-/* user_code.S — User program for Phase 4 testing
+/* user_code.S — LumaOS Shell v0.1 (Phase 5)
  *
- * Tests:
- *   1. Code page access (write/read own page)
- *   2. Heap allocation (sbrk syscall + lazy page fault mapping)
- *   3. Stack growth (access below initial mapping → PF → kernel maps page)
- *   4. Kernel memory protection (PID 1 reads 0x100000 → PF → terminated)
+ * Interactive shell with built-in commands:
+ *   help     - Show available commands
+ *   pid      - Print current PID
+ *   mem      - Show free page count
+ *   sleep N  - Sleep N ticks (50Hz → 20ms each)
+ *   exit     - Exit shell
+ *
+ * Syscalls: write(0), exit(1), getpid(2), sbrk(3),
+ *           read(4), sleep(5), yield(6), getpages(7)
  */
 .text
 .global user_code_start
 .global user_code_end
 
 user_code_start:
-    /* Get PID (syscall 2) */
-    movq $2, %rax
-    int $0x80
-    movq %rax, %r12              /* R12 = PID (preserved across syscalls) */
-
-    /* ---- Self-test: write/read own page ---- */
-    leaq test_data(%rip), %rax   /* address within our own 2MB page */
-    movq $0x41414141, (%rax)     /* write (bit 31=0, sign-extends cleanly) */
-    movq (%rax), %rax            /* read back */
-    cmpq $0x41414141, %rax
-    jne .fail
-
-    /* ---- Print "PID:X OK\n" (9 chars) ---- */
-    subq $32, %rsp
-    movl $0x3a444950, (%rsp)     /* "PID:" */
-    movb %r12b, 4(%rsp)          /* PID (raw 1 or 2) */
-    addb $0x30, 4(%rsp)          /* -> ASCII */
-    movl $0x0a4b4f20, 5(%rsp)    /* " OK\n" */
-    movb $0, 9(%rsp)             /* null terminator */
-
+    /* ---- Print welcome ---- */
+    leaq msg_welcome(%rip), %rdi
     xorq %rax, %rax
-    leaq (%rsp), %rdi
-    movq $9, %rsi
+    movq $18, %rsi
     int $0x80
-    addq $32, %rsp
 
-    /* ---- Test heap allocation (sbrk + lazy mapping) ---- */
-    movq $3, %rax               /* syscall: sbrk */
-    movq $4096, %rdi            /* increment = 1 page */
-    int $0x80
-    movq %rax, %r13             /* R13 = heap address (old limit = base) */
-
-    /* Write to heap -- triggers lazy page fault, kernel maps page.
-       Use 32-bit ops: 0xCAFEBABE has bit 31 set, so movq would
-       sign-extend to 0xFFFFFFFF_CAFEBABE which clang rejects. */
-    movl $0xCAFEBABE, (%r13)
-    movl (%r13), %eax            /* read back */
-    cmpl $0xCAFEBABE, %eax
-    jne .heap_fail
-
-    /* Print "HEAP OK\n" */
-    leaq msg_heap_ok(%rip), %rdi
+    leaq msg_help_hint(%rip), %rdi
     xorq %rax, %rax
-    movq $8, %rsi
+    movq $27, %rsi
     int $0x80
-    jmp .stack_test
 
-.heap_fail:
-    leaq msg_heap_fail(%rip), %rdi
+    /* ---- Main shell loop ---- */
+.shell_loop:
+    leaq msg_prompt(%rip), %rdi
     xorq %rax, %rax
-    movq $12, %rsi
+    movq $2, %rsi
     int $0x80
 
-.stack_test:
-    /* ---- Test stack growth (lazy page fault) ---- */
-    subq $8192, %rsp             /* 2 pages below initial 4KB mapping */
-    /* Use 32-bit ops for consistency (value fits in 32 bits) */
-    movl $0x55555555, (%rsp)    /* write -- triggers PF, kernel maps page */
-    movl (%rsp), %eax            /* read back */
-    cmpl $0x55555555, %eax
-    jne .stack_fail
-    addq $8192, %rsp             /* restore stack */
+    xorq %r12, %r12              /* R12 = command length */
 
-    /* Print "STACK OK\n" */
-    leaq msg_stack_ok(%rip), %rdi
+    /* ---- Read loop ---- */
+.read_loop:
+    movq $4, %rax               /* read(buf, 1) */
+    leaq char_buf(%rip), %rdi
+    movq $1, %rsi
+    int $0x80
+    cmpq $0, %rax
+    je .no_char
+
+    movzbl char_buf(%rip), %eax
+
+    cmpl $0x0A, %eax             /* Enter */
+    je .handle_enter
+
+    cmpl $0x08, %eax             /* Backspace */
+    je .handle_backspace
+
+    cmpq $63, %r12               /* buffer full? */
+    jae .read_loop
+
+    /* Echo char */
+    movq $0, %rax
+    leaq char_buf(%rip), %rdi
+    movq $1, %rsi
+    int $0x80
+
+    /* Store in cmd_buf */
+    movb %al, cmd_buf(%rip, %r12)
+    incq %r12
+    jmp .read_loop
+
+.no_char:
+    movq $6, %rax               /* yield */
+    int $0x80
+    jmp .read_loop
+
+.handle_backspace:
+    testq %r12, %r12
+    jz .read_loop
+    decq %r12
+    leaq bs_seq(%rip), %rdi
     xorq %rax, %rax
-    movq $9, %rsi
+    movq $3, %rsi
     int $0x80
+    jmp .read_loop
 
-    /* ---- If PID == 1: attempt forbidden kernel access ---- */
-    cmpq $1, %r12
-    jne .exit
-
-    /* Print "PID:1 PF TEST\n" (14 chars) */
-    leaq msg_pf(%rip), %rdi
+.handle_enter:
+    leaq nl_str(%rip), %rdi
     xorq %rax, %rax
-    movq $14, %rsi
+    movq $1, %rsi
     int $0x80
 
-    /* Try to read kernel memory at 0x100000 -- supervisor-only -> PF */
-    movq $0x100000, %rax
-    movq (%rax), %rax
+    movb $0, cmd_buf(%rip, %r12)  /* null-terminate */
+    testq %r12, %r12
+    jz .shell_loop               /* empty command */
 
-    /* Should never reach here (page fault above) */
-    jmp .exit
+    /* ---- Parse command ---- */
+    leaq cmd_buf(%rip), %rdi
 
-.stack_fail:
-    leaq msg_stack_fail(%rip), %rdi
+    leaq cmd_help(%rip), %rsi
+    call strcmp
+    testq %rax, %rax
+    jz .do_help
+
+    leaq cmd_pid(%rip), %rsi
+    call strcmp
+    testq %rax, %rax
+    jz .do_pid
+
+    leaq cmd_mem(%rip), %rsi
+    call strcmp
+    testq %rax, %rax
+    jz .do_mem
+
+    leaq cmd_exit(%rip), %rsi
+    call strcmp
+    testq %rax, %rax
+    jz .do_exit
+
+    leaq cmd_sleep(%rip), %rsi
+    call starts_with
+    testq %rax, %rax
+    jnz .do_sleep
+
+    leaq msg_unknown(%rip), %rdi
     xorq %rax, %rax
-    movq $12, %rsi
+    movq $17, %rsi
     int $0x80
-    jmp .exit
+    jmp .shell_loop
 
-.fail:
-    /* Self-test failed */
-    leaq msg_fail(%rip), %rdi
+    /* ---- Command handlers ---- */
+
+.do_help:
+    leaq msg_help_text(%rip), %rdi
+    xorq %rax, %rax
+    movq $120, %rsi
+    int $0x80
+    jmp .shell_loop
+
+.do_pid:
+    movq $2, %rax               /* getpid */
+    int $0x80
+    call itoa                   /* RDI = string ptr */
+    movq %rdi, %r14             /* save itoa result */
+    leaq msg_pid_prefix(%rip), %rdi
     xorq %rax, %rax
     movq $5, %rsi
     int $0x80
+    movq %r14, %rdi             /* restore itoa string */
+    call strlen                 /* RAX = length */
+    movq %rax, %rsi
+    movq %r14, %rdi
+    xorq %rax, %rax
+    int $0x80
+    leaq nl_str(%rip), %rdi
+    movq $1, %rsi
+    xorq %rax, %rax
+    int $0x80
+    jmp .shell_loop
 
-.exit:
-    /* Exit (syscall 1) */
+.do_mem:
+    movq $7, %rax               /* getpages */
+    int $0x80
+    call itoa
+    movq %rdi, %r14
+    leaq msg_mem_prefix(%rip), %rdi
+    xorq %rax, %rax
+    movq $12, %rsi
+    int $0x80
+    movq %r14, %rdi
+    call strlen
+    movq %rax, %rsi
+    movq %r14, %rdi
+    xorq %rax, %rax
+    int $0x80
+    leaq nl_str(%rip), %rdi
+    movq $1, %rsi
+    xorq %rax, %rax
+    int $0x80
+    jmp .shell_loop
+
+.do_sleep:
+    leaq cmd_buf+6(%rip), %rdi  /* skip "sleep " */
+    call parse_num
+    testq %rax, %rax
+    jnz .sleep_have_num
+    movq $50, %rax              /* default: 1 second */
+.sleep_have_num:
+    movq %rax, %r13
+    leaq msg_sleeping(%rip), %rdi
+    xorq %rax, %rax
+    movq $12, %rsi
+    int $0x80
+    movq $5, %rax              /* sleep(ticks) */
+    movq %r13, %rdi
+    int $0x80
+    leaq msg_done(%rip), %rdi
+    xorq %rax, %rax
+    movq $5, %rsi
+    int $0x80
+    jmp .shell_loop
+
+.do_exit:
     movq $1, %rax
     int $0x80
-
-    /* Should never reach here */
 1:
     pause
     jmp 1b
 
-test_data:
-    .quad 0
+    /* ===== Helper functions ===== */
 
-msg_heap_ok:
-    .asciz "HEAP OK\n"
-msg_heap_fail:
-    .asciz "HEAP FAIL!\n"
-msg_stack_ok:
-    .asciz "STACK OK\n"
-msg_stack_fail:
-    .asciz "STACK FAIL!\n"
-msg_pf:
-    .asciz "PID:1 PF TEST\n"
-msg_fail:
-    .asciz "FAIL\n"
+    /* strcmp: compare null-terminated strings at RDI and RSI */
+    /* Returns: RAX = 0 if equal, 1 if different */
+strcmp:
+    pushq %rbx
+.strcmp_loop:
+    movb (%rdi), %al
+    movb (%rsi), %bl
+    testb %al, %al
+    jz .strcmp_end
+    cmpb %al, %bl
+    jne .strcmp_diff
+    incq %rdi
+    incq %rsi
+    jmp .strcmp_loop
+.strcmp_end:
+    testb %bl, %bl
+    jz .strcmp_equal
+.strcmp_diff:
+    movq $1, %rax
+    popq %rbx
+    ret
+.strcmp_equal:
+    xorq %rax, %rax
+    popq %rbx
+    ret
+
+    /* starts_with: check if string at RDI starts with prefix at RSI */
+    /* Returns: RAX = prefix length if match, 0 if no match */
+starts_with:
+    xorq %rax, %rax
+.sw_loop:
+    movb (%rsi, %rax), %cl
+    testb %cl, %cl
+    jz .sw_match
+    movb (%rdi, %rax), %dl
+    cmpb %cl, %dl
+    jne .sw_fail
+    incq %rax
+    jmp .sw_loop
+.sw_match:
+    ret
+.sw_fail:
+    xorq %rax, %rax
+    ret
+
+    /* itoa: convert RAX to decimal string in itoa_buf */
+    /* Returns: RDI = pointer to start of string */
+    /* Clobbers: RAX, RCX, RDX */
+itoa:
+    leaq itoa_buf+23(%rip), %rdi
+    movb $0, (%rdi)             /* null terminator */
+    testq %rax, %rax
+    jnz .itoa_loop
+    decq %rdi
+    movb $0x30, (%rdi)          /* '0' */
+    ret
+.itoa_loop:
+    xorq %rdx, %rdx
+    movq $10, %rcx
+    divq %rcx                   /* RDX:RAX / 10 */
+    addb $0x30, %dl             /* remainder → ASCII */
+    decq %rdi
+    movb %dl, (%rdi)
+    testq %rax, %rax
+    jnz .itoa_loop
+    ret
+
+    /* strlen: length of string at RDI */
+    /* Returns: RAX = length */
+strlen:
+    xorq %rax, %rax
+.strlen_loop:
+    movb (%rdi, %rax), %cl
+    testb %cl, %cl
+    jz .strlen_done
+    incq %rax
+    jmp .strlen_loop
+.strlen_done:
+    ret
+
+    /* parse_num: parse decimal number from string at RDI */
+    /* Returns: RAX = number (0 if no valid digits) */
+parse_num:
+    xorq %rax, %rax
+.parse_loop:
+    movb (%rdi), %cl
+    testb %cl, %cl
+    jz .parse_done
+    subb $0x30, %cl
+    jb .parse_done
+    cmpb $9, %cl
+    ja .parse_done
+    imulq $10, %rax, %rax
+    movzbq %cl, %rcx
+    addq %rcx, %rax
+    incq %rdi
+    jmp .parse_loop
+.parse_done:
+    ret
+
+    /* ===== Data ===== */
+
+cmd_buf:
+    .skip 64
+char_buf:
+    .byte 0
+itoa_buf:
+    .skip 24
+
+msg_welcome:
+    .asciz "LumaOS Shell v0.1\n"
+msg_help_hint:
+    .asciz "Type 'help' for commands\n\n"
+msg_prompt:
+    .asciz "> "
+msg_unknown:
+    .asciz "Unknown command\n"
+msg_help_text:
+    .asciz "Commands:\n  help    - Show this help\n  pid     - Print PID\n  mem     - Show free pages\n  sleep N - Sleep N ticks (50Hz)\n  exit    - Exit shell\n"
+msg_pid_prefix:
+    .asciz "PID: "
+msg_mem_prefix:
+    .asciz "Free pages: "
+msg_sleeping:
+    .asciz "Sleeping...\n"
+msg_done:
+    .asciz "Done\n"
+nl_str:
+    .asciz "\n"
+bs_seq:
+    .asciz "\b \b"
+
+cmd_help:
+    .asciz "help"
+cmd_pid:
+    .asciz "pid"
+cmd_mem:
+    .asciz "mem"
+cmd_exit:
+    .asciz "exit"
+cmd_sleep:
+    .asciz "sleep "
 
 user_code_end:
