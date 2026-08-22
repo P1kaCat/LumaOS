@@ -55,16 +55,17 @@ user_code_start:
     cmpq $63, %r12               /* buffer full? */
     jae .read_loop
 
-    /* Echo char */
+    /* Store char in cmd_buf BEFORE echo — the write syscall
+       clobbers RAX (returns byte count), destroying AL. */
+    leaq cmd_buf(%rip), %r15
+    movb %al, (%r15,%r12)
+    incq %r12
+
+    /* Echo char (RAX gets clobbered here, but char already stored) */
     movq $0, %rax
     leaq char_buf(%rip), %rdi
     movq $1, %rsi
     int $0x80
-
-    /* Store in cmd_buf */
-    leaq cmd_buf(%rip), %r15
-    movb %al, (%r15,%r12)
-    incq %r12
     jmp .read_loop
 
 .no_char:
