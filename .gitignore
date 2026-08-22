@@ -1,15 +1,14 @@
 # Build output
 build/
 
-# OVMF firmware (téléchargé séparément)
-tools/ovmf/
+# OVMF firmware binaries (téléchargés séparément, voir tools/ovmf/README.md)
+tools/ovmf/*.fd
 
 # Compiled binaries
 *.efi
 *.o
 *.elf
 *.img
-*.fd
 
 # OS / IDE
 .DS_Store
