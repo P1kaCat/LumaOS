@@ -181,6 +181,13 @@ void exception_handler(uint64_t int_no, uint64_t err_code) {
     serial_puts(" (err: ");
     serial_puts(uxtoa(err_code, buf));
     serial_puts(")\n");
+    if (int_no == 14) {
+        uint64_t cr2;
+        __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
+        serial_puts("[!] Page fault at 0x");
+        serial_puts(uxtoa(cr2, buf));
+        serial_puts("\n");
+    }
     serial_puts("[!] Halting.\n");
     for (;;) __asm__ volatile ("hlt");
 }

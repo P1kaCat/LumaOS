@@ -22,7 +22,7 @@ all: $(KERNEL_BIN)
 
 $(KERNEL_BIN): $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o $(BUILD_DIR)/user.o linker.ld
 	@mkdir -p $(BUILD_DIR)
-	$(LD) $(KERNEL_LDFLAGS) -o $@ $(BUILD_DIR)/boot.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o $(BUILD_DIR)/user.o $(BUILD_DIR)/kernel.o
+	$(LD) $(KERNEL_LDFLAGS) -o $@ $(BUILD_DIR)/boot.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o $(BUILD_DIR)/user.o $(BUILD_DIR)/user_code.o $(BUILD_DIR)/kernel.o
 	@echo "Kernel built: $@"
 
 $(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ../include/handoff.h
@@ -48,6 +48,11 @@ $(BUILD_DIR)/sched.o: sched.c sched.h
 $(BUILD_DIR)/user.o: user.c user.h cpu.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c user.c -o $@
+
+
+$(BUILD_DIR)/user_code.o: user_code.S
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(ASM_FLAGS) -c user_code.S -o $@
 
 $(BUILD_DIR)/boot.o: boot.S
 	@mkdir -p $(BUILD_DIR)

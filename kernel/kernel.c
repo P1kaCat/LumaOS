@@ -94,7 +94,7 @@ void kernel_main(struct lumaos_handoff *ho) {
     __asm__ volatile ("sti");
 
     serial_puts("\n[*] Setting up user mode (Ring 3)...\n");
-    serial_puts("[+] Paging: user-accessible (U/S bit set)\n");
+    serial_puts("[+] Paging: kernel isolated, user region mapped\n");
     user_init(); /* never returns — enters Ring 3 */
 
     for (;;) __asm__ volatile ("hlt");

@@ -1,53 +1,22 @@
-/* user.c — User program (Ring 3) + enter_ring3 */
 #include <stdint.h>
 #include "cpu.h"
 
-/* User stack — 16KB */
-static uint64_t user_stack[2048];
+extern const unsigned char user_code_start[];
+extern const unsigned char user_code_end[];
 
-/* User program runs in Ring 3. Can only use int 0x80 for syscalls. */
-void user_program(void) {
-    const char *msg1 = "Hello from Ring 3!\n";
-    const char *msg2 = "Syscalls are working!\n";
-    const char *msg3 = "Ring 3 is alive and isolated.\n";
+#define USER_CODE_ADDR  0x40000000ULL
+#define USER_STACK_TOP  0x40200000ULL
 
-    __asm__ volatile (
-        "mov $0, %%rax\n"
-        "mov %0, %%rdi\n"
-        "mov $18, %%rsi\n"
-        "int $0x80\n"
-        : : "r"(msg1) : "rax", "rdi", "rsi"
-    );
-    __asm__ volatile (
-        "mov $0, %%rax\n"
-        "mov %0, %%rdi\n"
-        "mov $22, %%rsi\n"
-        "int $0x80\n"
-        : : "r"(msg2) : "rax", "rdi", "rsi"
-    );
-    __asm__ volatile (
-        "mov $0, %%rax\n"
-        "mov %0, %%rdi\n"
-        "mov $29, %%rsi\n"
-        "int $0x80\n"
-        : : "r"(msg3) : "rax", "rdi", "rsi"
-    );
-
-    /* Spin in user mode (pause is NOT privileged, hlt IS) */
-    for (;;) __asm__ volatile ("pause");
-}
-
-/* Transition from Ring 0 to Ring 3 via iretq */
 __attribute__((noinline, noreturn))
 static void enter_ring3(void *entry, void *stack_top) {
     __asm__ volatile (
         "cli\n"
-        "mov %[sp], %%rsp\n"    /* switch to user stack */
-        "pushq $0x23\n"         /* SS = USER_DS */
-        "pushq %[sp]\n"         /* RSP = user stack top */
-        "pushq $0x202\n"        /* RFLAGS (IF=1) */
-        "pushq $0x1B\n"         /* CS = USER_CS */
-        "pushq %[rip]\n"        /* RIP = entry */
+        "mov %[sp], %%rsp\n"
+        "pushq $0x23\n"
+        "pushq %[sp]\n"
+        "pushq $0x202\n"
+        "pushq $0x1B\n"
+        "pushq %[rip]\n"
         "iretq\n"
         :
         : [sp] "r"((uint64_t)stack_top), [rip] "r"((uint64_t)entry)
@@ -57,6 +26,17 @@ static void enter_ring3(void *entry, void *stack_top) {
 }
 
 void user_init(void) {
-    serial_puts("[*] Entering Ring 3...\n");
-    enter_ring3((void *)user_program, (void *)&user_stack[2048]);
+    serial_puts("[*] Entering Ring 3 (page-level isolation)...\n");
+
+    /* Copy position-independent user code to user memory */
+    uint8_t *dst = (uint8_t *)(unsigned long)USER_CODE_ADDR;
+    const uint8_t *src = user_code_start;
+    uint64_t len = user_code_end - user_code_start;
+    for (uint64_t i = 0; i < len; i++)
+        dst[i] = src[i];
+
+    serial_puts("[+] User code copied to 0x40000000\n");
+
+    enter_ring3((void *)(unsigned long)USER_CODE_ADDR,
+                (void *)(unsigned long)USER_STACK_TOP);
 }
