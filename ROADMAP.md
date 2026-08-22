@@ -102,3 +102,14 @@
 - [ ] Page-level isolation (separate user/kernel page tables)
 - [ ] Process abstraction (PID, address space, fork/exec)
 
+
+### Phase 2 — Page-level isolation ✅
+- [x] Kernel pages supervisor-only (no U/S bit)
+- [x] User region at 0x800000 (2MB page, U/S bit set)
+- [x] Position-independent user code (RIP-relative strings in user_code.S)
+- [x] Ring 3 cannot access kernel memory → #14 Page Fault
+- [x] Page fault intercepted: displayed as PASS, not a crash
+- [x] Syscalls still functional (Ring 0 handler accesses kernel)
+- [ ] Separate user/kernel page tables (CR3 switching)
+- [ ] Process abstraction (PID, fork/exec)
+

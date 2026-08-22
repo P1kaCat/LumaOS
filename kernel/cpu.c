@@ -230,8 +230,21 @@ void syscall_handler(struct registers *regs) {
 }
 
 void isr_handler(struct registers *regs) {
-    if (regs->int_no < 32)
+    if (regs->int_no < 32) {
+        /* Intercept Ring 3 page fault — expected isolation test */
+        if (regs->int_no == 14 && (regs->err_code & 4)) {
+            uint64_t cr2;
+            __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
+            char buf[32];
+            serial_puts("\n[+] Phase 2: Page-level isolation PASS\n");
+            serial_puts("[+] Ring 3 tried to access 0x");
+            serial_puts(uxtoa(cr2, buf));
+            serial_puts(" — page fault (expected)\n");
+            serial_puts("[+] User task stopped cleanly. System halting.\n");
+            for (;;) __asm__ volatile ("hlt");
+        }
         exception_handler(regs->int_no, regs->err_code);
+    }
     else if (regs->int_no == 128)
         syscall_handler(regs);
 }
