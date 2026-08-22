@@ -130,7 +130,8 @@ void kernel_main(struct lumaos_handoff *ho) {
     serial_puts("  accessing unmapped VA...\n");
     test_fault_addr = test_va;
     test_fault_caught = 0;
-    __asm__ volatile("movq (%0), %%rax" : : "a"(test_va) : "rax");
+    uint64_t fault_val;
+    __asm__ volatile("movq (%1), %0" : "=a"(fault_val) : "b"(test_va));
     serial_puts(test_fault_caught ? "  [+] Page fault caught, system continues\n" : "  [!] No fault (unexpected)\n");
 
     serial_puts("\n[*] Starting scheduler...\n");
