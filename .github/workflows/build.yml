@@ -160,7 +160,8 @@ jobs:
             "Kernel is alive!" \
             "[ATA]" \
             "[FAT32]" \
-            "Phase 4+5 regression test passed"
+            "Phase 4+5 regression test passed" \
+            "[VFS] test passed"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"

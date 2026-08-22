@@ -6,6 +6,7 @@
 #include "user.h"
 #include "ata.h"
 #include "fat32.h"
+#include "vfs.h"
 
 static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
@@ -235,6 +236,117 @@ void kernel_main(struct lumaos_handoff *ho) {
         }
     } else {
         serial_puts("[*] FAT32 skipped — ATA not available\n");
+    }
+
+    /* ---- Phase 6: VFS layer test ---- */
+    if (ata_present_check()) {
+        serial_puts("\n[*] Testing VFS layer...\n");
+        vfs_init();
+
+        int vfs_ok = 1;
+
+        /* Test 1: Open HELLO.TXT and read its contents */
+        int fd = vfs_open("hello.txt");
+        if (fd < 0) {
+            serial_puts("  [!] vfs_open(\"hello.txt\") failed: ");
+            char ebuf[8]; serial_puts(uitoa((uint64_t)fd, ebuf)); serial_puts("\n");
+            vfs_ok = 0;
+        } else {
+            serial_puts("  [+] vfs_open(\"hello.txt\") = fd ");
+            serial_puts(uitoa((uint64_t)fd, buf)); serial_puts("\n");
+
+            /* Read file contents */
+            char file_buf[256];
+            int n = vfs_read(fd, file_buf, sizeof(file_buf) - 1);
+            if (n < 0) {
+                serial_puts("  [!] vfs_read failed: ");
+                serial_puts(uitoa((uint64_t)n, buf)); serial_puts("\n");
+                vfs_ok = 0;
+            } else {
+                file_buf[n] = 0;
+                serial_puts("  [+] vfs_read returned ");
+                serial_puts(uitoa((uint64_t)n, buf));
+                serial_puts(" bytes:\n");
+                serial_puts("  ---\n");
+                serial_puts(file_buf);
+                serial_puts("  ---\n");
+            }
+
+            /* Test 2: Read again — should return 0 (EOF) */
+            int n2 = vfs_read(fd, file_buf, 1);
+            if (n2 == 0) {
+                serial_puts("  [+] EOF handling: OK (read returned 0)\n");
+            } else {
+                serial_puts("  [!] EOF handling: expected 0, got ");
+                serial_puts(uitoa((uint64_t)n2, buf)); serial_puts("\n");
+                vfs_ok = 0;
+            }
+
+            /* Close the file */
+            int cr = vfs_close(fd);
+            if (cr == 0) {
+                serial_puts("  [+] vfs_close(fd) = OK\n");
+            } else {
+                serial_puts("  [!] vfs_close failed: ");
+                serial_puts(uitoa((uint64_t)cr, buf)); serial_puts("\n");
+                vfs_ok = 0;
+            }
+        }
+
+        /* Test 3: Open non-existent file */
+        int fd2 = vfs_open("nonexist.txt");
+        if (fd2 == VFS_ERR_NOT_FOUND) {
+            serial_puts("  [+] Invalid path: OK (returned NOT_FOUND)\n");
+        } else {
+            serial_puts("  [!] Invalid path: expected NOT_FOUND, got ");
+            serial_puts(uitoa((uint64_t)fd2, buf)); serial_puts("\n");
+            vfs_ok = 0;
+        }
+
+        /* Test 4: Read from invalid FD */
+        int n3 = vfs_read(99, file_buf, 10);
+        if (n3 == VFS_ERR_BAD_FD) {
+            serial_puts("  [+] Invalid FD read: OK (returned BAD_FD)\n");
+        } else {
+            serial_puts("  [!] Invalid FD read: expected BAD_FD, got ");
+            serial_puts(uitoa((uint64_t)n3, buf)); serial_puts("\n");
+            vfs_ok = 0;
+        }
+
+        /* Test 5: Close invalid FD */
+        int cr2 = vfs_close(99);
+        if (cr2 == VFS_ERR_BAD_FD) {
+            serial_puts("  [+] Invalid FD close: OK (returned BAD_FD)\n");
+        } else {
+            serial_puts("  [!] Invalid FD close: expected BAD_FD, got ");
+            serial_puts(uitoa((uint64_t)cr2, buf)); serial_puts("\n");
+            vfs_ok = 0;
+        }
+
+        /* Test 6: Open second file (TEST.TXT) to verify multiple FDs */
+        int fd3 = vfs_open("test.txt");
+        if (fd3 >= 0) {
+            serial_puts("  [+] vfs_open(\"test.txt\") = fd ");
+            serial_puts(uitoa((uint64_t)fd3, buf)); serial_puts("\n");
+            char tbuf[128];
+            int tn = vfs_read(fd3, tbuf, sizeof(tbuf) - 1);
+            if (tn > 0) {
+                tbuf[tn] = 0;
+                serial_puts("  [+] Read ");
+                serial_puts(uitoa((uint64_t)tn, buf));
+                serial_puts(" bytes from TEST.TXT\n");
+            }
+            vfs_close(fd3);
+        } else {
+            serial_puts("  [!] vfs_open(\"test.txt\") failed\n");
+            vfs_ok = 0;
+        }
+
+        if (vfs_ok) {
+            serial_puts("[VFS] test passed\n");
+        } else {
+            serial_puts("[VFS] test FAILED\n");
+        }
     }
 
     /* ---- Phase 5: scheduler + shell ---- */

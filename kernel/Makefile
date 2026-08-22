@@ -18,7 +18,8 @@ KERNEL_BIN := $(BUILD_DIR)/kernel.elf
 
 KERNEL_OBJS := $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o \
                $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o \
-               $(BUILD_DIR)/user.o $(BUILD_DIR)/user_code.o $(BUILD_DIR)/ata.o $(BUILD_DIR)/fat32.o
+               $(BUILD_DIR)/user.o $(BUILD_DIR)/user_code.o $(BUILD_DIR)/ata.o \
+               $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o
 
 .PHONY: all clean
 
@@ -29,7 +30,7 @@ $(KERNEL_BIN): $(KERNEL_OBJS) linker.ld
 	$(LD) $(KERNEL_LDFLAGS) -o $@ $(KERNEL_OBJS)
 	@echo "Kernel built: $@"
 
-$(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h ../include/handoff.h
+$(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
@@ -68,6 +69,10 @@ $(BUILD_DIR)/ata.o: ata.c ata.h cpu.h
 $(BUILD_DIR)/fat32.o: fat32.c fat32.h ata.h cpu.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c fat32.c -o $@
+
+$(BUILD_DIR)/vfs.o: vfs.c vfs.h fat32.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c vfs.c -o $@
 
 clean:
 	@rm -rf $(BUILD_DIR)
