@@ -62,7 +62,8 @@ user_code_start:
     int $0x80
 
     /* Store in cmd_buf */
-    movb %al, cmd_buf(%rip, %r12)
+    leaq cmd_buf(%rip), %r15
+    movb %al, (%r15,%r12)
     incq %r12
     jmp .read_loop
 
@@ -87,7 +88,8 @@ user_code_start:
     movq $1, %rsi
     int $0x80
 
-    movb $0, cmd_buf(%rip, %r12)  /* null-terminate */
+    leaq cmd_buf(%rip), %r15
+    movb $0, (%r15,%r12)  /* null-terminate */
     testq %r12, %r12
     jz .shell_loop               /* empty command */
 
