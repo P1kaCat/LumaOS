@@ -4,8 +4,8 @@
 extern const unsigned char user_code_start[];
 extern const unsigned char user_code_end[];
 
-#define USER_CODE_ADDR  0x40000000ULL
-#define USER_STACK_TOP  0x40200000ULL
+#define USER_CODE_ADDR  0x800000ULL
+#define USER_STACK_TOP  0xA00000ULL
 
 __attribute__((noinline, noreturn))
 static void enter_ring3(void *entry, void *stack_top) {
@@ -35,7 +35,7 @@ void user_init(void) {
     for (uint64_t i = 0; i < len; i++)
         dst[i] = src[i];
 
-    serial_puts("[+] User code copied to 0x40000000\n");
+    serial_puts("[+] User code copied to 0x800000\n");
 
     enter_ring3((void *)(unsigned long)USER_CODE_ADDR,
                 (void *)(unsigned long)USER_STACK_TOP);

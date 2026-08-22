@@ -31,17 +31,17 @@ void paging_init(void) {
     pml4[0] = (uint64_t)pdpt | 0x07;  /* present, writable */
 
     for (int i = 0; i < 4; i++) {
-        /* PDPT[1] user-accessible (contains user region), rest supervisor-only */
-        pdpt[i] = (uint64_t)pd[i] | (i == 1 ? 0x07 : 0x03);
+        /* PDPT[0] user-accessible (contains user region at 8MB), rest supervisor-only */
+        pdpt[i] = (uint64_t)pd[i] | (i == 0 ? 0x07 : 0x03);
         for (int j = 0; j < 512; j++) {
             uint64_t addr = (uint64_t)i * 0x40000000ULL + (uint64_t)j * 0x200000ULL;
-            /* Only 0x40000000 (PD[1][0]) is user-accessible */
-            pd[i][j] = addr | ((i == 1 && j == 0) ? 0x87 : 0x83);
+            /* Only 0x800000 (PD[0][4]) is user-accessible */
+            pd[i][j] = addr | ((i == 0 && j == 4) ? 0x87 : 0x83);
         }
     }
 
     __asm__ volatile ("mov %0, %%cr3" : : "r"((uint64_t)pml4));
-    serial_puts("[+] Paging: kernel supervisor-only, user @0x40000000 (2MB pages)\n");
+    serial_puts("[+] Paging: kernel supervisor-only, user @0x800000 (2MB pages)\n");
 }
 
 /* ===== Heap (bump allocator) ===== */
