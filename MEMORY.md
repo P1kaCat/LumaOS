@@ -751,3 +751,11 @@
   Serial output complet : GOP trouvé, kernel.elf chargé, ELF parsé, kernel loadé à 0x100000, memory map récupéré, exit boot services réussi, kernel_main atteint et handoff validé.
   Le bug du EFI_TABLE_HEADER manquant (commit 51c448d) était bien la cause du "GOP not found" — fixé du premier coup.
   Phase 0B officiellement terminée. ROADMAP.md mis à jour (Phase 0B ✅). Prochaine étape : Phase 0C (GDT, IDT, paging, heap allocator, scheduler minimal).
+
+109. Phase 0C validée dans QEMU ! GDT (3 entries), PIC remappé, IDT (256 entries), sti activé — aucun crash, kernel reste idle. Serial output complet :
+  [+] GDT loaded (3 entries)
+  [+] PIC remapped (IRQ0-15 → vectors 32-47)
+  [+] IDT loaded (256 entries)
+  [+] Interrupts enabled
+  LumaOS Phase 0C complete. System idle.
+  Reste pour Phase 0C+ : page tables, heap allocator, scheduler minimal.

@@ -7,7 +7,7 @@
 | 1 | Bootloader | ✅ | Bootloader UEFI minimal — affiche "LumaOS", charge kernel.elf, transmet framebuffer + memory map, exit boot services (Phase 0A + 0B) |
 | 2 | Kernel minimal | ✅ | Point d'entrée du kernel, handoff bootloader→kernel, proof of life framebuffer + serial |
 | 3 | Gestion mémoire | ⬜ | Allocation mémoire basique |
-| 4 | Interruptions | 🔄 | Gestion des interruptions (IDT, ISR) |
+| 4 | Interruptions | ✅ | Gestion des interruptions (IDT, ISR) |
 | 5 | Threads et processus | ⬜ | Scheduler minimal, multi-tâches cooperatif puis préemptif |
 
 ## Phase 1 — Entrées / Sorties
@@ -62,13 +62,13 @@
 - [x] Root Makefile (build kernel + bootloader + image + QEMU)
 - [x] Test dans QEMU : framebuffer change de couleur + serial output — VALIDÉ ✅
 
-### Phase 0C — Fondations kernel 🔄
+### Phase 0C — Fondations kernel ✅ (GDT/IDT/PIC)
 - [x] GDT setup (null + code64 + data segments)
 - [x] PIC 8259A remapping (IRQ0-15 → vectors 32-47)
 - [x] IDT setup (256 entries, exception + IRQ stubs)
 - [x] ISR stubs en assembly (48 stubs: 32 exceptions + 16 IRQs)
 - [x] Exception handler C (dump serial + halt)
-- [ ] Test QEMU : GDT + IDT + sti (pas de crash)
+- [x] Test QEMU : GDT + IDT + sti — VALIDÉ ✅
 - [ ] Page tables (4-level paging)
 - [ ] Heap allocator
 - [ ] Scheduler minimal
