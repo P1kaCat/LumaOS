@@ -5,7 +5,7 @@
 #
 # Jobs:
 #   build     — make clean && make, verify artifacts
-#   qemu-test — boot in QEMU headless, check serial output for expected markers
+#   qemu-test — boot in QEMU headless, inject "exit" to shell, check serial markers
 
 name: Build & Test
 
@@ -63,24 +63,89 @@ jobs:
       - name: Build
         run: make clean && make
 
-      - name: Boot in QEMU (headless, 30s timeout)
+      - name: Diagnostic info
         run: |
+          echo "=== QEMU version ==="
+          qemu-system-x86_64 --version
+          echo ""
+          echo "=== OVMF firmware ==="
+          ls -lh tools/ovmf/
+          echo ""
+          echo "=== Build artifacts ==="
+          ls -lh build/efi_root/EFI/BOOT/
+          ls -lh build/kernel/kernel.elf
+          ls -lh build/disk.img
+          echo ""
+          echo "=== Disk image (first 64 bytes) ==="
+          xxd -l 64 build/disk.img
+
+      - name: Boot in QEMU (headless, inject shell input)
+        run: |
+          set -x
+
           # Copy OVMF vars (normally done by 'make run')
           cp tools/ovmf/OVMF_VARS.fd build/ovmf_vars.fd
 
-          # Boot QEMU headless — mirrors Makefile 'run' target but with:
+          # Start QEMU headless:
           #   -display none  : no GTK in headless CI
           #   -no-reboot     : exit on triple fault instead of reboot loop
-          # Serial output (-serial stdio) captured via tee
-          # timeout sends SIGTERM after 30s, SIGKILL after 5 more
-          timeout -k 5 30 qemu-system-x86_64 \
+          #   -monitor unix  : QEMU monitor on unix socket for sendkey injection
+          #   -serial file   : serial output to file (no buffering issues with tee)
+          qemu-system-x86_64 \
             -display none \
             -no-reboot \
+            -monitor unix:/tmp/qemu-mon.sock,server,nowait \
             -drive if=pflash,format=raw,unit=0,file=tools/ovmf/OVMF_CODE.fd,readonly=on \
             -drive if=pflash,format=raw,unit=1,file=build/ovmf_vars.fd \
             -drive file=fat:rw:build/efi_root,format=raw,media=disk \
             -drive file=build/disk.img,format=raw,if=ide,index=1 \
-            -serial stdio 2>&1 | tee serial.log || true
+            -serial file:serial.log &
+          QEMU_PID=$!
+
+          # Wait for kernel to boot and shell to start (~3-5s, give 10s margin)
+          sleep 10
+
+          # Inject "exit" + Enter into the shell via QEMU monitor
+          # sendkey injects PS/2 scan codes into the virtual keyboard controller
+          # Keys e,x,i,t are in the same position on QWERTY and AZERTY
+          python3 << 'PYEOF'
+          import socket, time
+          s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          s.connect('/tmp/qemu-mon.sock')
+          # Drain QEMU monitor banner/welcome
+          s.settimeout(0.5)
+          try:
+              while True:
+                  data = s.recv(4096)
+                  if not data:
+                      break
+          except socket.timeout:
+              pass
+          # Send "exit" + Enter, one key at a time
+          s.settimeout(2.0)
+          for key in ['e', 'x', 'i', 't', 'ret']:
+              s.send(f'sendkey {key}\n'.encode())
+              time.sleep(0.3)
+              # Drain any response
+              try:
+                  s.recv(4096)
+              except socket.timeout:
+                  pass
+          s.close()
+          print("Sent 'exit' + Enter via QEMU monitor")
+          PYEOF
+
+          # Wait for shell to process "exit", trigger cleanup + regression test output
+          sleep 5
+
+          # Kill QEMU gracefully
+          kill $QEMU_PID 2>/dev/null || true
+          wait $QEMU_PID 2>/dev/null || true
+          set +x
+
+          echo ""
+          echo "=== Full serial output ==="
+          cat serial.log
 
       - name: Verify serial output markers
         run: |
