@@ -1,0 +1,352 @@
+LUMAOS COMMUNITY LICENSE
+Version 1.0 — August 22, 2026
+
+Copyright (c) 2026 Kyllian / P1kaCat
+
+============================================================
+1. DEFINITIONS
+============================================================
+
+For the purposes of this License:
+
+"LumaOS" means the operating system, source code, binaries,
+documentation, assets, and other materials distributed by the
+LumaOS project under this License.
+
+"The Original Project" means the official LumaOS project and
+its official repositories, websites, and distribution channels.
+
+"Copyright Holder" means the original author or authors of the
+LumaOS project and any other copyright holders identified in
+the applicable source files.
+
+"Fork" means a derivative project based on LumaOS in which the
+source code is substantially modified, reorganized, or developed
+as an independent project.
+
+"Contribution" means a modification, improvement, bug fix,
+feature, documentation change, or other work intentionally
+submitted for inclusion in the Original Project.
+
+"Local Modification" means a modification made for private,
+personal, educational, experimental, or development purposes
+which is not distributed to third parties.
+
+"Derivative Project" means a project based on or substantially
+derived from LumaOS, including a Fork.
+
+"Distribution" means making LumaOS or a Derivative Project
+available to another person or entity, whether through physical
+media, downloads, repositories, package systems, or any other
+method.
+
+"Commercial Use" means any use primarily intended to generate
+revenue, profit, commercial advantage, or monetary compensation.
+
+============================================================
+2. GRANT OF RIGHTS
+============================================================
+
+Subject to the terms and conditions of this License, the
+Copyright Holder grants you a limited, non-exclusive,
+non-transferable, royalty-free license to:
+
+(a) use LumaOS for personal, educational, research, experimental,
+    and development purposes;
+
+(b) run LumaOS on physical or virtual hardware;
+
+(c) inspect and study the source code;
+
+(d) create Local Modifications;
+
+(e) create Forks and other non-commercial Derivative Projects;
+
+(f) create and submit Contributions to the Original Project.
+
+These permissions are granted only for purposes permitted by
+this License.
+
+============================================================
+3. CONTRIBUTIONS TO THE ORIGINAL PROJECT
+============================================================
+
+You may modify the LumaOS source code for the purpose of
+contributing improvements to the Original Project.
+
+Contributions may include, but are not limited to:
+
+- bug fixes;
+- security fixes;
+- performance improvements;
+- hardware support;
+- drivers;
+- system functionality;
+- userland functionality;
+- documentation;
+- build system improvements;
+- testing infrastructure;
+- other improvements relevant to LumaOS.
+
+A Contribution submitted to the Original Project may be
+incorporated, modified, relicensed, or redistributed by the
+Copyright Holder as permitted by the project's contribution
+policies and applicable law.
+
+Submitting a Contribution does not transfer ownership of your
+copyright in that Contribution unless a separate written
+agreement explicitly provides otherwise.
+
+============================================================
+4. LOCAL MODIFICATIONS
+============================================================
+
+You may modify LumaOS for personal, educational, experimental,
+or development purposes.
+
+A Local Modification that is not intended to become a
+Contribution to the Original Project must remain local.
+
+You may not distribute such a Local Modification to another
+person or entity unless it is converted into a compliant Fork
+or Derivative Project and all applicable requirements of this
+License are satisfied.
+
+Local Modifications may be used privately without requiring
+publication of the modified source code.
+
+============================================================
+5. FORKS AND DERIVATIVE PROJECTS
+============================================================
+
+Forks and other non-commercial Derivative Projects are
+permitted.
+
+A Fork must:
+
+(a) clearly identify itself as a derivative of LumaOS;
+
+(b) provide a visible reference to the Original Project;
+
+(c) provide a link to the official LumaOS project whenever
+    reasonably possible;
+
+(d) retain this License and all applicable copyright notices;
+
+(e) clearly distinguish itself from the Original Project;
+
+(f) use a name that does not imply that the Fork is the
+official LumaOS project;
+
+(g) not use the official LumaOS logo or other official branding;
+
+(h) not represent itself as being developed, maintained,
+    endorsed, or officially supported by the LumaOS project;
+
+(i) remain non-commercial.
+
+A Fork may be substantially modified and may evolve into an
+independent operating system or software project, provided that
+the requirements of this License continue to be respected for
+the portions derived from LumaOS.
+
+============================================================
+6. NAME AND TRADEMARK RESTRICTIONS
+============================================================
+
+The name "LumaOS", the official LumaOS logo, and other official
+LumaOS branding may not be used to identify or promote a Fork
+or Derivative Project in a manner that suggests official
+association with the Original Project.
+
+Forks must choose their own project name and branding.
+
+The following are prohibited for a Fork:
+
+- using "LumaOS" as the primary project name;
+- using the official LumaOS logo;
+- presenting the Fork as the official LumaOS distribution;
+- implying endorsement by the Copyright Holder without
+  explicit written permission.
+
+This section does not prohibit factual statements such as:
+
+"This project is based on LumaOS."
+
+"This project is a fork of LumaOS."
+
+"This software contains code derived from LumaOS."
+
+============================================================
+7. NON-COMMERCIAL REQUIREMENT
+============================================================
+
+LumaOS and Derivative Projects covered by this License may not
+be sold, licensed for payment, rented, leased, or otherwise
+commercially distributed.
+
+You may not:
+
+(a) sell LumaOS;
+
+(b) sell a Fork of LumaOS;
+
+(c) sell a Derivative Project substantially based on LumaOS;
+
+(d) include LumaOS or substantial portions of LumaOS in a
+    commercial product for the purpose of generating revenue;
+
+(e) charge a mandatory fee for access to LumaOS or a Fork;
+
+(f) use LumaOS as the basis of a commercial operating system
+distribution.
+
+Non-commercial distribution is permitted only when all other
+conditions of this License are satisfied.
+
+============================================================
+8. REDISTRIBUTION
+============================================================
+
+Redistribution of LumaOS or a Derivative Project is permitted
+only when the redistribution complies fully with this License.
+
+Any permitted redistribution must:
+
+(a) include this License;
+
+(b) retain applicable copyright notices;
+
+(c) clearly identify substantial modifications where applicable;
+
+(d) identify the project as a Fork or Derivative Project when
+    applicable;
+
+(e) provide a reference to the Original Project;
+
+(f) comply with the naming and branding requirements of this
+    License;
+
+(g) remain non-commercial.
+
+Removing, replacing, or intentionally obscuring this License
+from a redistributed copy is prohibited.
+
+============================================================
+9. COPYRIGHT AND ATTRIBUTION
+============================================================
+
+Copyright notices contained in LumaOS must not be removed,
+hidden, or intentionally altered.
+
+A Fork or Derivative Project must preserve appropriate
+attribution to the Original Project.
+
+At minimum, a Fork must contain a notice substantially similar
+to:
+
+"This project is derived from LumaOS.
+Original project: https://github.com/P1kaCat/LumaOS"
+
+Additional attribution may be provided at the discretion of the
+Fork developer.
+
+============================================================
+10. CHANGES TO THIS LICENSE
+============================================================
+
+This License applies to the version of LumaOS with which it is
+distributed.
+
+The Copyright Holder may publish newer versions of this License.
+
+A newer version does not automatically replace the version under
+which an existing copy of LumaOS was received unless explicitly
+stated by the Copyright Holder.
+
+Forks may not replace this License with a different license for
+the LumaOS-derived portions of the project.
+
+============================================================
+11. NO WARRANTY
+============================================================
+
+LUMAOS IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE
+COPYRIGHT HOLDER DISCLAIMS ALL WARRANTIES, INCLUDING BUT NOT
+LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+THE COPYRIGHT HOLDER DOES NOT WARRANT THAT LUMAOS WILL BE
+ERROR-FREE, SECURE, RELIABLE, OR SUITABLE FOR ANY PARTICULAR
+HARDWARE OR PURPOSE.
+
+============================================================
+12. LIMITATION OF LIABILITY
+============================================================
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE
+COPYRIGHT HOLDER SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ARISING FROM THE USE, INABILITY TO USE, MODIFICATION,
+DISTRIBUTION, OR OPERATION OF LUMAOS.
+
+THIS INCLUDES, WITHOUT LIMITATION, LOSS OF DATA, HARDWARE
+DAMAGE, SYSTEM DAMAGE, LOSS OF PROFITS, OR LOSS OF BUSINESS.
+
+============================================================
+13. TERMINATION
+============================================================
+
+Your rights under this License automatically terminate if you
+materially violate its terms.
+
+Upon termination, you must cease all activities permitted under
+this License, including distribution of LumaOS and Derivative
+Projects.
+
+Termination does not affect rights lawfully granted to other
+users who have complied with this License.
+
+Rights may be restored if the violation is permanently corrected
+and the Copyright Holder explicitly permits restoration.
+
+============================================================
+14. SEVERABILITY
+============================================================
+
+If any provision of this License is determined to be invalid or
+unenforceable, the remaining provisions shall remain in effect
+to the maximum extent permitted by applicable law.
+
+The invalid provision shall be interpreted or modified only to
+the minimum extent necessary to make it enforceable while
+preserving its original intent.
+
+============================================================
+15. ACCEPTANCE
+============================================================
+
+By using, modifying, contributing to, or distributing LumaOS,
+you acknowledge that you have read, understood, and agreed to
+the terms of this License.
+
+If you do not agree to these terms, you may not use, modify,
+contribute to, or distribute LumaOS.
+
+============================================================
+16. CONTACT
+============================================================
+
+For licensing questions, permissions, trademark requests,
+or other inquiries concerning LumaOS, contact the Copyright
+Holder through the official LumaOS project channels.
+
+Official project:
+https://github.com/P1kaCat/LumaOS
+
+============================================================
+END OF LUMAOS COMMUNITY LICENSE v1.0
+============================================================
