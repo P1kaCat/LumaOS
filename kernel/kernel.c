@@ -38,14 +38,14 @@ static void task1_main(void) {
     uint64_t count = 0; char buf[32];
     for (;;) {
         serial_puts("  [Task 1] tick "); serial_puts(uitoa(count++, buf)); serial_puts("\n");
-        __asm__ volatile ("hlt");
+        __asm__ volatile ("hlt" ::: "memory");
     }
 }
 static void task2_main(void) {
     uint64_t count = 0; char buf[32];
     for (;;) {
         serial_puts("  [Task 2] tick "); serial_puts(uitoa(count++, buf)); serial_puts("\n");
-        __asm__ volatile ("hlt");
+        __asm__ volatile ("hlt" ::: "memory");
     }
 }
 
@@ -157,22 +157,32 @@ void kernel_main(struct lumaos_handoff *ho) {
 
     serial_puts("[+] Scheduler running (kernel tasks + 2 user processes)\n");
 
-    /* Wait for all user processes to terminate, then check for page leaks */
-    int cleanup_test_done = 0;
+    /* Wait for all user processes to terminate, then check for page leaks.
+       The "memory" clobber on hlt is critical: without it, -O2 may cache
+       reads from the tasks array across hlt, since the compiler doesn't
+       know that the interrupt handler modifies tasks[].state via
+       proc_terminate(). */
+    volatile int cleanup_test_done = 0;
     for (;;) {
-        __asm__ volatile ("hlt");
-        if (!cleanup_test_done && count_active_user_procs() == 0) {
-            cleanup_test_done = 1;
-            uint64_t pages_final = count_free_pages();
-            serial_puts("\n[*] All user processes terminated\n");
-            serial_puts("  Free pages: ");
-            serial_puts(uitoa(pages_final, buf));
-            if (pages_final >= pages_before) {
-                serial_puts(" (>= initial — no leak, OK)\n");
-            } else {
-                serial_puts(" (< initial — LEAK!)\n");
+        __asm__ volatile ("hlt" ::: "memory");
+        if (!cleanup_test_done) {
+            int active = count_active_user_procs();
+            if (active == 0) {
+                cleanup_test_done = 1;
+                uint64_t pages_final = count_free_pages();
+                serial_puts("\n[*] All user processes terminated\n");
+                serial_puts("  Free pages: before=");
+                serial_puts(uitoa(pages_before, buf));
+                serial_puts(" final=");
+                serial_puts(uitoa(pages_final, buf));
+                serial_puts("\n");
+                if (pages_final >= pages_before) {
+                    serial_puts("  [+] No page leak (pages_final >= pages_before)\n");
+                } else {
+                    serial_puts("  [!] Page leak detected!\n");
+                }
+                serial_puts("[+] Phase 4 complete: protection, cleanup, heap, lazy alloc, stack\n");
             }
-            serial_puts("[+] Phase 4 complete: protection, cleanup, heap, lazy alloc, stack\n");
         }
     }
 }
