@@ -5,7 +5,7 @@
 | # | Composant | Statut | Description |
 |---|-----------|--------|-------------|
 | 1 | Bootloader | ✅ | Bootloader UEFI minimal — affiche "LumaOS", charge kernel.elf, transmet framebuffer + memory map, exit boot services (Phase 0A + 0B) |
-| 2 | Kernel minimal | 🔄 | Point d'entrée du kernel, handoff bootloader→kernel, proof of life framebuffer + serial |
+| 2 | Kernel minimal | ✅ | Point d'entrée du kernel, handoff bootloader→kernel, proof of life framebuffer + serial |
 | 3 | Gestion mémoire | ⬜ | Allocation mémoire basique |
 | 4 | Interruptions | ⬜ | Gestion des interruptions (IDT, ISR) |
 | 5 | Threads et processus | ⬜ | Scheduler minimal, multi-tâches cooperatif puis préemptif |
@@ -49,7 +49,7 @@
 - [x] BOOTX64.EFI bootable dans QEMU/OVMF
 - [x] Makefile avec `make run`
 
-### Phase 0B — Kernel minimal 🔄
+### Phase 0B — Kernel minimal ✅
 - [x] Handoff struct bootloader → kernel (framebuffer + memory map)
 - [x] Bootloader : lit kernel.elf depuis le disque (SimpleFileSystem)
 - [x] Bootloader : parse ELF, charge segments à 0x100000
@@ -60,7 +60,7 @@
 - [x] Kernel : kernel.c (handoff validation, framebuffer fill, serial output)
 - [x] Linker script (kernel.elf à 0x100000)
 - [x] Root Makefile (build kernel + bootloader + image + QEMU)
-- [ ] Test dans QEMU : framebuffer change de couleur + serial output
+- [x] Test dans QEMU : framebuffer change de couleur + serial output — VALIDÉ ✅
 
 ### Phase 0C — Fondations kernel (à venir)
 - [ ] GDT setup

@@ -745,3 +745,9 @@
   - `Makefile` (root) — make build/run/debug/clean
   - `ROADMAP.md` — Phase 0A ✅, Phase 0B 🔄
   Pour tester : `git pull` puis `make run` depuis le root du repo. Le kernel devrait changer la couleur de l'écran + écrire sur le port série.
+
+108. "LumaOS Kernel — Phase 0B / Kernel is alive!" — VALIDÉ dans QEMU ! 🎉
+  Résolution détectée : 1280x800, format BGR. Fond bleu foncé + rectangle vert au centre du framebuffer.
+  Serial output complet : GOP trouvé, kernel.elf chargé, ELF parsé, kernel loadé à 0x100000, memory map récupéré, exit boot services réussi, kernel_main atteint et handoff validé.
+  Le bug du EFI_TABLE_HEADER manquant (commit 51c448d) était bien la cause du "GOP not found" — fixé du premier coup.
+  Phase 0B officiellement terminée. ROADMAP.md mis à jour (Phase 0B ✅). Prochaine étape : Phase 0C (GDT, IDT, paging, heap allocator, scheduler minimal).
