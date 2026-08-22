@@ -226,4 +226,87 @@ uint64_t count_free_pages(void) {
     return total_free_pages;
 }
 
+/* ===== Dynamic Page Mapping (4KB pages) ===== */
+
+/* Walk the 4-level page table hierarchy for va.
+   If create=1, allocate missing intermediate tables via alloc_page().
+   Returns pointer to the final PTE, or NULL on failure. */
+static uint64_t *walk_pt(uint64_t cr3, uint64_t va, int create, uint64_t flags) {
+    uint64_t *table = (uint64_t *)(unsigned long)cr3;
+
+    /* Indices for each level */
+    uint64_t idx4 = (va >> 39) & 0x1FF;  /* PML4 */
+    uint64_t idx3 = (va >> 30) & 0x1FF;  /* PDPT */
+    uint64_t idx2 = (va >> 21) & 0x1FF;  /* PD   */
+    uint64_t idx1 = (va >> 12) & 0x1FF;  /* PT   */
+
+    /* Level 4: PML4 → PDPT */
+    uint64_t entry = table[idx4];
+    if (!(entry & PTE_PRESENT)) {
+        if (!create) return NULL;
+        uint64_t page = alloc_page();
+        if (!page) return NULL;
+        uint64_t *newt = (uint64_t *)(unsigned long)page;
+        for (int i = 0; i < 512; i++) newt[i] = 0;
+        table[idx4] = page | PTE_PRESENT | PTE_WRITABLE | (flags & PTE_USER);
+        entry = table[idx4];
+    }
+    table = (uint64_t *)(unsigned long)(entry & ~0xFFFULL);
+
+    /* Level 3: PDPT → PD */
+    entry = table[idx3];
+    if (!(entry & PTE_PRESENT)) {
+        if (!create) return NULL;
+        uint64_t page = alloc_page();
+        if (!page) return NULL;
+        uint64_t *newt = (uint64_t *)(unsigned long)page;
+        for (int i = 0; i < 512; i++) newt[i] = 0;
+        table[idx3] = page | PTE_PRESENT | PTE_WRITABLE | (flags & PTE_USER);
+        entry = table[idx3];
+    } else if (entry & PTE_PS) {
+        return NULL;  /* 1GB large page — can't map 4KB here */
+    }
+    table = (uint64_t *)(unsigned long)(entry & ~0xFFFULL);
+
+    /* Level 2: PD → PT */
+    entry = table[idx2];
+    if (!(entry & PTE_PRESENT)) {
+        if (!create) return NULL;
+        uint64_t page = alloc_page();
+        if (!page) return NULL;
+        uint64_t *newt = (uint64_t *)(unsigned long)page;
+        for (int i = 0; i < 512; i++) newt[i] = 0;
+        table[idx2] = page | PTE_PRESENT | PTE_WRITABLE | (flags & PTE_USER);
+        entry = table[idx2];
+    } else if (entry & PTE_PS) {
+        return NULL;  /* 2MB large page — can't map 4KB here */
+    }
+    table = (uint64_t *)(unsigned long)(entry & ~0xFFFULL);
+
+    /* Level 1: PT — return pointer to the specific entry */
+    return &table[idx1];
+}
+
+int map_page(uint64_t cr3, uint64_t va, uint64_t pa, uint64_t flags) {
+    uint64_t *pte = walk_pt(cr3, va, 1, flags);
+    if (!pte) return -1;           /* couldn't walk (2MB page or OOM) */
+    if (*pte & PTE_PRESENT) return -2;  /* already mapped */
+    *pte = (pa & ~0xFFFULL) | (flags & 0xFFF) | PTE_PRESENT;
+    return 0;
+}
+
+int unmap_page(uint64_t cr3, uint64_t va) {
+    uint64_t *pte = walk_pt(cr3, va, 0, 0);
+    if (!pte || !(*pte & PTE_PRESENT)) return -1;  /* not mapped */
+    *pte = 0;
+    __asm__ volatile("invlpg (%0)" : : "r"(va) : "memory");
+    return 0;
+}
+
+uint64_t get_page(uint64_t cr3, uint64_t va) {
+    uint64_t *pte = walk_pt(cr3, va, 0, 0);
+    if (!pte) return 0;
+    return *pte;
+}
+
 /* force rebuild */

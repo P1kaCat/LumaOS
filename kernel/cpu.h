@@ -98,4 +98,8 @@ void irq_handler(struct registers *regs);
 void exception_handler(uint64_t int_no, uint64_t err_code);
 void irq_default_handler(uint8_t irq);
 
+/* Phase 4: kernel page fault test recovery */
+extern volatile uint64_t test_fault_addr;
+extern volatile int test_fault_caught;
+
 #endif /* LUMAOS_CPU_H */

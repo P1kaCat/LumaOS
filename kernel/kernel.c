@@ -98,6 +98,41 @@ void kernel_main(struct lumaos_handoff *ho) {
     serial_puts("  alloc_page() = 0x"); serial_puts(uxtoa(p4, buf)); serial_puts(" (should reuse freed page)\n");
     serial_puts("  free pages: "); serial_puts(uitoa(count_free_pages(), buf)); serial_puts("\n");
 
+    /* ---- Dynamic mapping test (map / write / read / unmap / PF) ---- */
+    serial_puts("\n[*] Testing dynamic page mapping...\n");
+
+    uint64_t cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+    cr3 &= ~0xFFFULL;
+
+    uint64_t test_va = 0x100000000ULL;  /* 4GB — above existing 0-4GB mappings */
+    uint64_t test_pa = alloc_page();
+    serial_puts("  alloc_page() = 0x"); serial_puts(uxtoa(test_pa, buf)); serial_puts("\n");
+
+    int mr = map_page(cr3, test_va, test_pa, PTE_PRESENT | PTE_WRITABLE);
+    serial_puts("  map_page(0x100000000, 0x"); serial_puts(uxtoa(test_pa, buf));
+    serial_puts(") = "); serial_puts(uitoa((uint64_t)mr, buf)); serial_puts(mr == 0 ? " (OK)\n" : " (FAIL)\n");
+
+    volatile uint64_t *tptr = (volatile uint64_t *)(unsigned long)test_va;
+    *tptr = 0xDEADBEEFC0FFEEULL;
+    uint64_t tval = *tptr;
+    serial_puts("  write/read 0x"); serial_puts(uxtoa(tval, buf));
+    serial_puts(tval == 0xDEADBEEFC0FFEEULL ? " — OK\n" : " — MISMATCH\n");
+
+    int ur = unmap_page(cr3, test_va);
+    serial_puts("  unmap_page() = "); serial_puts(uitoa((uint64_t)ur, buf)); serial_puts(ur == 0 ? " (OK)\n" : " (FAIL)\n");
+
+    uint64_t pte = get_page(cr3, test_va);
+    serial_puts("  PTE after unmap = 0x"); serial_puts(uxtoa(pte, buf));
+    serial_puts(pte == 0 ? " (unmapped)\n" : " (ERROR)\n");
+
+    /* Access after unmap — should trigger page fault, caught by test handler */
+    serial_puts("  accessing unmapped VA...\n");
+    test_fault_addr = test_va;
+    test_fault_caught = 0;
+    __asm__ volatile("movq (%0), %%rax" : : "a"(test_va) : "rax");
+    serial_puts(test_fault_caught ? "  [+] Page fault caught, system continues\n" : "  [!] No fault (unexpected)\n");
+
     serial_puts("\n[*] Starting scheduler...\n");
     sched_init();
     task_create(task1_main, 1);

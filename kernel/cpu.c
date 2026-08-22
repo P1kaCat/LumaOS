@@ -25,6 +25,10 @@ static char *uxtoa(uint64_t n, char *buf) {
 static struct gdt_entry gdt[7];
 static struct gdt_ptr   gdtr;
 struct tss tss;
+
+/* Phase 4: kernel-mode page fault recovery for map/unmap test */
+volatile uint64_t test_fault_addr = 0;
+volatile int test_fault_caught = 0;
 static uint64_t tss_stack[2048]; /* 16KB ring-0 stack for ring 3 transitions */
 
 static void gdt_set_entry(int i, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
@@ -245,6 +249,20 @@ void syscall_handler(struct registers *regs) {
 
 void isr_handler(struct registers *regs) {
     if (regs->int_no < 32) {
+        /* Phase 4: kernel-mode page fault recovery for map/unmap test.
+           If test_fault_addr is set and CR2 matches, catch the fault,
+           skip the faulting instruction, and continue. */
+        if (regs->int_no == 14 && test_fault_addr != 0 && !(regs->err_code & 4)) {
+            uint64_t cr2;
+            __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
+            if (cr2 == test_fault_addr) {
+                test_fault_caught = 1;
+                test_fault_addr = 0;
+                regs->rip += 3;  /* skip 3-byte movq (%rax), %rax */
+                return;
+            }
+            /* CR2 mismatch — unexpected kernel PF, fall through to handler */
+        }
         /* Intercept Ring 3 page fault — expected isolation test */
         if (regs->int_no == 14 && (regs->err_code & 4)) {
             uint64_t cr2;
