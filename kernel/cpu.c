@@ -231,6 +231,7 @@ void syscall_handler(struct registers *regs) {
                 serial_puts(" exited normally\n");
             }
             proc_terminate(proc_current_pid());
+            __asm__ volatile ("sti");
             for (;;) __asm__ volatile ("hlt");
             break;
         case 2: /* getpid() */
@@ -257,6 +258,7 @@ void isr_handler(struct registers *regs) {
             serial_puts(uitoa(proc_current_pid(), buf));
             serial_puts(" terminated (page fault)\n");
             proc_terminate(proc_current_pid());
+            __asm__ volatile ("sti");
             for (;;) __asm__ volatile ("hlt");
         }
         exception_handler(regs->int_no, regs->err_code);
