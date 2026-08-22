@@ -19,7 +19,8 @@ QEMU       := qemu-system-x86_64
 
 # Flags compilation (C -> object file COFF)
 EFI_CFLAGS  := --target=x86_64-unknown-windows -ffreestanding -fshort-wchar \
-               -mno-red-zone -mno-stack-arg-probe -O2 -Wall -Wextra
+               -mno-red-zone -mno-stack-arg-probe -O2 -Wall -Wextra \
+               -Wno-unused-parameter
 
 # Flags linkage (object file -> PE32+ UEFI)
 EFI_LDFLAGS := --target=x86_64-unknown-windows -nostdlib -fuse-ld=lld-link \
@@ -52,7 +53,7 @@ run: build
 	$(QEMU) \
 	  -drive if=pflash,format=raw,unit=0,file=$(OVMF_DIR)/OVMF_CODE.fd,readonly=on \
 	  -drive if=pflash,format=raw,unit=1,file=$(BUILD_DIR)/ovmf_vars.fd \
-	  -drive file=fat:$(EFI_ROOT),format=raw,media=disk \
+	  -drive file=fat:rw:$(EFI_ROOT),format=raw,media=disk \
 	  -serial stdio
 
 # clean : supprime le dossier de build
