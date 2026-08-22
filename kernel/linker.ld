@@ -31,6 +31,8 @@ SECTIONS {
         *(COMMON)
     }
 
+    _kernel_end = .;
+
     /* Discarder les sections inutiles */
     /DISCARD/ : {
         *(.eh_frame)

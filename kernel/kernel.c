@@ -56,7 +56,7 @@ void kernel_main(struct lumaos_handoff *ho) {
     }
 
     serial_puts("\n================================\n");
-    serial_puts("  LumaOS Kernel — Phase 3 (Process Abstraction)\n");
+    serial_puts("  LumaOS Kernel — Phase 4 (Virtual Memory)\n");
     serial_puts("================================\n");
     serial_puts("Kernel is alive!\n\n");
 
@@ -83,6 +83,20 @@ void kernel_main(struct lumaos_handoff *ho) {
     void *b = kmalloc(1024);
     serial_puts("  kmalloc(256)  = 0x"); serial_puts(uxtoa((uint64_t)(unsigned long)a, buf)); serial_puts("\n");
     serial_puts("  kmalloc(1024) = 0x"); serial_puts(uxtoa((uint64_t)(unsigned long)b, buf)); serial_puts("\n");
+
+    serial_puts("\n[*] Initializing page allocator...\n");
+    page_allocator_init(ho);
+    uint64_t p1 = alloc_page();
+    uint64_t p2 = alloc_page();
+    uint64_t p3 = alloc_page();
+    serial_puts("  alloc_page() = 0x"); serial_puts(uxtoa(p1, buf)); serial_puts("\n");
+    serial_puts("  alloc_page() = 0x"); serial_puts(uxtoa(p2, buf)); serial_puts("\n");
+    serial_puts("  alloc_page() = 0x"); serial_puts(uxtoa(p3, buf)); serial_puts("\n");
+    free_page(p2);
+    serial_puts("  free_page(0x"); serial_puts(uxtoa(p2, buf)); serial_puts(")\n");
+    uint64_t p4 = alloc_page();
+    serial_puts("  alloc_page() = 0x"); serial_puts(uxtoa(p4, buf)); serial_puts(" (should reuse freed page)\n");
+    serial_puts("  free pages: "); serial_puts(uitoa(count_free_pages(), buf)); serial_puts("\n");
 
     serial_puts("\n[*] Starting scheduler...\n");
     sched_init();
