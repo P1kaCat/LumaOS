@@ -3,6 +3,7 @@
 #define LUMAOS_MEM_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include "../include/handoff.h"
 
 void paging_init(void);
