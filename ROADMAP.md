@@ -13,10 +13,12 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification: `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`, `Phase 4+5 regression test passed`
+- [x] Boot marker verification (7 markers):
+  - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
+  - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
 - [x] Serial log artifact upload on failure
 
-Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection)
+Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers)
 
 ---
 
@@ -182,16 +184,23 @@ Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
 - [x] 8.3 short name parsing
 - [x] QEMU validation (HELLO.TXT, TEST.TXT listed)
 
-### VFS layer — ⬜ Not started
-- [ ] Minimal VFS abstraction
-- [ ] File descriptor table (per-process)
-- [ ] `vfs_open()`, `vfs_close()`, `vfs_read()`
+### VFS layer — ✅ Done
+- [x] File descriptor table (`vfs.c`/`vfs.h`, 8 slots)
+- [x] `vfs_open()`: path → fd via fat32_lookup
+- [x] `vfs_close()`: fd release with validation
+- [x] `vfs_read()`: fd → kernel buffer, position tracking, EOF
+- [x] Error codes: `VFS_ERR_NOT_FOUND`, `VFS_ERR_BAD_FD`
+- [x] Kernel-space test in QEMU (HELLO.TXT read, EOF, invalid path/FD)
 
-### Syscalls — ⬜ Not started
-- [ ] `open(path)` → fd (syscall 8)
-- [ ] `close(fd)` (syscall 9)
-- [ ] `read(fd, buf, len)` → bytes read (syscall 10)
-- [ ] Error codes: file not found, bad fd, etc.
+### Syscalls — ✅ Done
+- [x] `open(path)` → fd (syscall 8, RDI=path)
+- [x] `close(fd)` (syscall 9, RDI=fd)
+- [x] `read(fd, buf, len)` → bytes read (syscall 10, RDI=fd, RSI=buf, RDX=len)
+- [x] User pointer validation: `validate_user_ptr()` checks address range + page mappings (PRESENT/USER/WRITABLE)
+- [x] Bounded string copy: `copy_str_from_user()` (max 64 bytes, page boundary checks)
+- [x] Error codes: file not found, bad fd, invalid pointer
+- [x] Ring 3 regression test (10 tests, `[SYSCALL6] test passed`)
+- [x] Large page fix: `get_page()` handles 2MB/1GB pages (PTE_PS)
 
 ### Userland — ⬜ Not started
 - [ ] `cat hello.txt` shell command
