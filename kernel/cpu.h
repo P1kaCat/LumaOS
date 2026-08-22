@@ -43,6 +43,7 @@ struct tss {
 } __attribute__((packed));
 
 void tss_init(void);
+struct registers;
 void syscall_handler(struct registers *regs);
 
 void gdt_init(void);
