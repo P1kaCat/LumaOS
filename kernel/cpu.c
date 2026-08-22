@@ -223,6 +223,16 @@ void syscall_handler(struct registers *regs) {
             serial_puts((const char *)(unsigned long)regs->rdi);
             regs->rax = regs->rsi; /* return byte count */
             break;
+        case 1: /* exit() */
+            {
+                char buf[32];
+                serial_puts("[+] Process PID=");
+                serial_puts(uitoa(proc_current_pid(), buf));
+                serial_puts(" exited normally\n");
+            }
+            proc_terminate(proc_current_pid());
+            for (;;) __asm__ volatile ("hlt");
+            break;
         default:
             regs->rax = (uint64_t)-1;
             break;
@@ -240,7 +250,10 @@ void isr_handler(struct registers *regs) {
             serial_puts("[+] Ring 3 tried to access 0x");
             serial_puts(uxtoa(cr2, buf));
             serial_puts(" — page fault (expected)\n");
-            serial_puts("[+] User task stopped cleanly. System halting.\n");
+            serial_puts("[+] Process PID=");
+            serial_puts(uitoa(proc_current_pid(), buf));
+            serial_puts(" terminated (page fault)\n");
+            proc_terminate(proc_current_pid());
             for (;;) __asm__ volatile ("hlt");
         }
         exception_handler(regs->int_no, regs->err_code);

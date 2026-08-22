@@ -45,7 +45,7 @@ $(BUILD_DIR)/sched.o: sched.c sched.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c sched.c -o $@
 
-$(BUILD_DIR)/user.o: user.c user.h cpu.h
+$(BUILD_DIR)/user.o: user.c user.h cpu.h sched.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c user.c -o $@
 

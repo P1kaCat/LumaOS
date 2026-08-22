@@ -6,9 +6,9 @@
 |---|-----------|--------|-------------|
 | 1 | Bootloader | ✅ | Bootloader UEFI minimal — affiche "LumaOS", charge kernel.elf, transmet framebuffer + memory map, exit boot services (Phase 0A + 0B) |
 | 2 | Kernel minimal | ✅ | Point d'entrée du kernel, handoff bootloader→kernel, proof of life framebuffer + serial |
-| 3 | Gestion mémoire | ⬜ | Allocation mémoire basique |
+| 3 | Gestion mémoire | ✅ | Allocation mémoire basique |
 | 4 | Interruptions | ✅ | Gestion des interruptions (IDT, ISR) |
-| 5 | Threads et processus | ⬜ | Scheduler minimal, multi-tâches cooperatif puis préemptif |
+| 5 | Threads et processus | 🔄 | Scheduler minimal, multi-tâches cooperatif puis préemptif |
 
 ## Phase 1 — Entrées / Sorties
 
@@ -99,7 +99,7 @@
 - [x] User program: prints via syscall, spins with pause
 - [x] enter_ring3: iretq with user CS/SS/RFLAGS
 - [x] Test QEMU : Ring 3 + syscall + scheduler coexistence — VALIDÉ ✅
-- [ ] Page-level isolation (separate user/kernel page tables)
+- [x] Page-level isolation (done in Phase 2)
 - [ ] Process abstraction (PID, address space, fork/exec)
 
 
@@ -113,3 +113,14 @@
 - [ ] Separate user/kernel page tables (CR3 switching)
 - [ ] Process abstraction (PID, fork/exec)
 
+
+### Phase 3 — Process abstraction 🔄
+- [x] PID: each process has a unique ID
+- [x] proc_create_user(): create user process with Ring 3 frame
+- [x] proc_terminate(): mark process as TERMINATED
+- [x] Scheduler skips TERMINATED processes
+- [x] Syscall 1 (exit): user process terminates itself cleanly
+- [x] User program: prints, then exits via syscall
+- [ ] Test QEMU : process creation + exit + scheduler continues
+- [ ] Separate user/kernel page tables (CR3 switching)
+- [ ] fork/exec
