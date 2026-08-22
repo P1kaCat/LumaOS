@@ -95,3 +95,4 @@ void kfree(void *ptr) {
     /* Bump allocator — no free for now */
     (void)ptr;
 }
+/* force rebuild */
