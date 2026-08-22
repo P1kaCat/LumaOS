@@ -18,7 +18,7 @@ user_code_start:
 
     /* ---- Self-test: write/read own page ---- */
     leaq test_data(%rip), %rax   /* address within our own 2MB page */
-    movq $0x41414141, (%rax)     /* write */
+    movq $0x41414141, (%rax)     /* write (bit 31=0, sign-extends cleanly) */
     movq (%rax), %rax            /* read back */
     cmpq $0x41414141, %rax
     jne .fail
@@ -43,10 +43,12 @@ user_code_start:
     int $0x80
     movq %rax, %r13             /* R13 = heap address (old limit = base) */
 
-    /* Write to heap -- triggers lazy page fault, kernel maps page */
-    movq $0xCAFEBABE, (%r13)
-    movq (%r13), %rax            /* read back */
-    cmpq $0xCAFEBABE, %rax
+    /* Write to heap -- triggers lazy page fault, kernel maps page.
+       Use 32-bit ops: 0xCAFEBABE has bit 31 set, so movq would
+       sign-extend to 0xFFFFFFFF_CAFEBABE which clang rejects. */
+    movl $0xCAFEBABE, (%r13)
+    movl (%r13), %eax            /* read back */
+    cmpl $0xCAFEBABE, %eax
     jne .heap_fail
 
     /* Print "HEAP OK\n" */
@@ -65,9 +67,10 @@ user_code_start:
 .stack_test:
     /* ---- Test stack growth (lazy page fault) ---- */
     subq $8192, %rsp             /* 2 pages below initial 4KB mapping */
-    movq $0x55555555, (%rsp)    /* write -- triggers PF, kernel maps page */
-    movq (%rsp), %rax            /* read back */
-    cmpq $0x55555555, %rax
+    /* Use 32-bit ops for consistency (value fits in 32 bits) */
+    movl $0x55555555, (%rsp)    /* write -- triggers PF, kernel maps page */
+    movl (%rsp), %eax            /* read back */
+    cmpl $0x55555555, %eax
     jne .stack_fail
     addq $8192, %rsp             /* restore stack */
 
