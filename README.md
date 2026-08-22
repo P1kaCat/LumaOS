@@ -9,69 +9,60 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/P1kaCat/LumaOS">Repository</a>
-  ·
-  <a href="ROADMAP.md">Roadmap</a>
-  ·
-  <a href="ARCHITECTURE.md">Architecture</a>
-  ·
-  <a href="TOOLCHAIN.md">Toolchain</a>
-  ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="https://github.com/P1kaCat/LumaOS">Repository</a> ·
+  <a href="ROADMAP.md">Roadmap</a> ·
+  <a href="ARCHITECTURE.md">Architecture</a> ·
+  <a href="TOOLCHAIN.md">Toolchain</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="LICENSE">License</a>
 </p>
 
 ---
 
 ## About
 
-LumaOS is an experimental x86_64 operating system built from scratch
-with one goal in mind:
+LumaOS is an experimental **x86_64 operating system built from scratch**, designed around one core idea:
 
 > **Build an operating system that feels more like a gaming console than a traditional PC.**
 
-Instead of trying to reproduce the complexity of Windows or Linux,
-LumaOS is designed around a different philosophy:
+Rather than reproducing the complexity of a general-purpose desktop operating system, LumaOS is being designed around three priorities:
 
-**gaming first, simplicity first, performance first.**
+**gaming first · simplicity first · performance first**
 
-The project is currently in early development and runs inside QEMU/OVMF
-while its kernel and userspace are progressively being built.
+The project is currently in active early development and runs through **UEFI/OVMF and QEMU** while its kernel, memory management, processes, system calls, and userland continue to evolve.
 
 ---
 
 ## Vision
 
-LumaOS aims to eventually provide a complete gaming-oriented environment
-that boots directly into a simple, controller-friendly interface.
+LumaOS aims to become a complete gaming-oriented operating environment that boots into a simple, fast, controller-friendly experience.
 
-The long-term experience is envisioned around:
+The long-term vision includes:
 
 - 🎮 Controller-first navigation
 - ⚡ Minimal system overhead
 - 🖥️ Console-like user experience
 - 🔊 Custom audio and audiovisual identity
-- 🚀 Fast boot and responsive system
+- 🚀 Fast boot and responsive system behavior
 - 🧩 Native gaming APIs and runtime
-- 🔧 Direct control over hardware
-- 🛠️ A system built specifically around gaming
+- 🔧 Direct hardware control
+- 🛠️ A system designed specifically around gaming
 
 LumaOS is **not intended to become another general-purpose desktop OS**.
 
-Every major component should answer one question:
+Every major component should ultimately answer one question:
 
-> **Does this help the gaming experience?**
+> **Does this improve the gaming experience?**
 
 ---
 
-## Current Status
+## Development Status
 
-LumaOS is actively under development.
+LumaOS is actively developed through a series of defined development phases.
 
-The project is currently focused on **Phase 5 — Syscalls & Userland**.
+The complete project status, completed milestones, current work, and future plans are maintained in the **[Roadmap](ROADMAP.md)** rather than duplicated here.
 
-For the complete development status, completed milestones, and upcoming work, see the **[Roadmap](ROADMAP.md)**.
-
-> **Current milestone:** Building the foundations of a usable userland environment with system calls, an interactive shell, process management, and basic input/output.
+**→ [View the LumaOS Roadmap](ROADMAP.md)**
 
 ---
 
@@ -79,14 +70,14 @@ For the complete development status, completed milestones, and upcoming work, se
 
 ### Requirements
 
-- Windows, Linux, or another environment capable of running the build toolchain
+- Windows, Linux, or another environment capable of running the toolchain
 - Clang / LLVM
 - LLD
 - GNU Make
 - QEMU
 - OVMF / UEFI firmware
 
-See **[TOOLCHAIN.md](TOOLCHAIN.md)** for the complete toolchain and setup details.
+See **[TOOLCHAIN.md](TOOLCHAIN.md)** for complete setup information.
 
 ### Build & Run
 
@@ -105,11 +96,12 @@ LumaOS currently boots through **UEFI/OVMF** and runs inside **QEMU**.
 
 | Document | Description |
 |----------|-------------|
-| [Roadmap](ROADMAP.md) | Development phases, completed features, and upcoming milestones |
+| [Roadmap](ROADMAP.md) | Development phases, milestones, and future plans |
 | [Architecture](ARCHITECTURE.md) | System architecture and core design |
 | [Toolchain](TOOLCHAIN.md) | Compiler, assembler, linker, firmware, and development tools |
-| [Contributing](CONTRIBUTING.md) | Build, test, development, and contribution guidelines |
-| [Technical Memory](MEMORY.md) | Detailed notes about the current low-level implementation |
+| [Contributing](CONTRIBUTING.md) | Development and contribution guidelines |
+| [Technical Memory](MEMORY.md) | Detailed notes on the current low-level implementation |
+| [License](LICENSE) | LumaOS Community License v1.0 |
 
 ---
 
@@ -122,21 +114,31 @@ LumaOS is built around a few core principles:
 - **Performance-oriented** — keep overhead low and behavior predictable.
 - **Hardware-focused** — progressively move closer to direct hardware control.
 - **Modular** — keep major subsystems replaceable and independently evolvable.
-- **Open development** — document the architecture and development process.
+- **Transparent development** — document the architecture and development process.
 
 ---
 
 ## Contributing
 
-LumaOS is an experimental project and contributions, ideas, testing, and technical feedback are welcome.
+LumaOS is an experimental project, and technical contributions, testing, bug reports, ideas, and feedback are welcome within the project's license and contribution rules.
 
 Before contributing, please read **[CONTRIBUTING.md](CONTRIBUTING.md)** and check the **[Roadmap](ROADMAP.md)** to understand the current priorities.
+
+> Contributions should focus on improving the Original Project. Personal modifications that are not intended as contributions must remain local unless developed as a compliant non-commercial fork or derivative project.
 
 ---
 
 ## License
 
-LumaOS is open source. See the repository license for the terms of use and contribution.
+LumaOS is distributed under the **LumaOS Community License v1.0**.
+
+The license permits personal, educational, experimental, and development use, as well as contributions and compliant non-commercial forks. It also includes specific requirements concerning redistribution, attribution, project naming, branding, and commercial use.
+
+**Commercial use and sale of LumaOS or substantially derived projects are not permitted.** Forks must use their own name and branding and must clearly reference the Original Project.
+
+See the complete license for the legally binding terms:
+
+**→ [LumaOS Community License v1.0](LICENSE)**
 
 ---
 
