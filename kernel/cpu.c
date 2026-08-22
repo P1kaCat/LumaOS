@@ -24,7 +24,7 @@ static char *uxtoa(uint64_t n, char *buf) {
 
 static struct gdt_entry gdt[7];
 static struct gdt_ptr   gdtr;
-static struct tss       tss;
+struct tss tss;
 static uint64_t tss_stack[2048]; /* 16KB ring-0 stack for ring 3 transitions */
 
 static void gdt_set_entry(int i, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
@@ -232,6 +232,9 @@ void syscall_handler(struct registers *regs) {
             }
             proc_terminate(proc_current_pid());
             for (;;) __asm__ volatile ("hlt");
+            break;
+        case 2: /* getpid() */
+            regs->rax = (uint64_t)proc_current_pid();
             break;
         default:
             regs->rax = (uint64_t)-1;

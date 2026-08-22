@@ -56,7 +56,7 @@ void kernel_main(struct lumaos_handoff *ho) {
     }
 
     serial_puts("\n================================\n");
-    serial_puts("  LumaOS Kernel — Phase 3\n");
+    serial_puts("  LumaOS Kernel — Phase 3 (Process Abstraction)\n");
     serial_puts("================================\n");
     serial_puts("Kernel is alive!\n\n");
 
@@ -93,10 +93,10 @@ void kernel_main(struct lumaos_handoff *ho) {
     serial_puts("[+] Interrupts enabled (timer 50Hz + keyboard)\n");
     __asm__ volatile ("sti");
 
-    serial_puts("\n[*] Setting up user mode (Ring 3)...\n");
-    serial_puts("[+] Paging: kernel isolated, user region mapped\n");
-    user_init(); /* creates user process, returns */
+    serial_puts("\n[*] Setting up user processes (Ring 3)...\n");
+    serial_puts("[+] Paging: kernel isolated, user @0x800000\n");
+    user_init(); /* creates 2 user processes, returns */
 
-    serial_puts("[+] Scheduler running (kernel tasks + user process)\n");
+    serial_puts("[+] Scheduler running (kernel tasks + 2 user processes)\n");
     for (;;) __asm__ volatile ("hlt");
 }

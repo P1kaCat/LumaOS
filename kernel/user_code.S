@@ -1,21 +1,26 @@
-/* user_code.S — Position-independent user program (copied to 0x800000) */
+/* user_code.S — Position-independent user program (Phase 3) */
 .text
 .global user_code_start
 .global user_code_end
 
 user_code_start:
-    /* Syscall 0: write_serial(rdi=ptr, rsi=len) */
-
-    /* Message 1: "Hello from Ring 3!\\n" (19 chars) */
-    leaq msg1(%rip), %rdi
-    xorq %rax, %rax
-    movq $19, %rsi
+    /* Get PID (syscall 2) */
+    movq $2, %rax
     int $0x80
+    /* RAX = PID (1 or 2) */
+    movq %rax, %rbx
 
-    /* Message 2: "Exiting normally.\\n" (18 chars) */
-    leaq msg2(%rip), %rdi
+    /* Build "PID:X\n" on stack (6 chars) */
+    subq $16, %rsp
+    movl $0x3a444950, (%rsp)    /* "PID:" little-endian */
+    addb $0x30, %bl             /* PID -> ASCII digit */
+    movb %bl, 4(%rsp)           /* store digit */
+    movw $0x000a, 5(%rsp)       /* "\n\0" */
+
+    /* Print (syscall 0: write_serial(ptr, len)) */
     xorq %rax, %rax
-    movq $18, %rsi
+    leaq (%rsp), %rdi
+    movq $6, %rsi
     int $0x80
 
     /* Exit (syscall 1) */
@@ -26,10 +31,5 @@ user_code_start:
 1:
     pause
     jmp 1b
-
-msg1:
-    .asciz "Hello from Ring 3!\n"
-msg2:
-    .asciz "Exiting normally.\n"
 
 user_code_end:

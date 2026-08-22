@@ -27,6 +27,12 @@ static uint64_t pml4[512] __attribute__((aligned(4096)));
 static uint64_t pdpt[512] __attribute__((aligned(4096)));
 static uint64_t pd[4][512] __attribute__((aligned(4096)));  /* 4 PDs → 4GB */
 
+/* Phase 3: per-process page tables (shared kernel PDs) */
+#define MAX_PROCS 4
+static uint64_t proc_pml4[MAX_PROCS][512] __attribute__((aligned(4096)));
+static uint64_t proc_pdpt[MAX_PROCS][512] __attribute__((aligned(4096)));
+static uint64_t proc_pd[MAX_PROCS][512] __attribute__((aligned(4096)));
+
 void paging_init(void) {
     pml4[0] = (uint64_t)pdpt | 0x07;  /* present, writable */
 
@@ -42,6 +48,34 @@ void paging_init(void) {
 
     __asm__ volatile ("mov %0, %%cr3" : : "r"((uint64_t)pml4));
     serial_puts("[+] Paging: kernel supervisor-only, user @0x800000 (2MB pages)\n");
+}
+
+/* Phase 3: create per-process page tables.
+   Maps virtual 0x800000 (2MB user page) to user_phys_addr.
+   Kernel space (0-1GB minus user page) is shared supervisor-only.
+   Returns physical address of the new PML4. */
+uint64_t create_user_pml4(int idx, uint64_t user_phys_addr) {
+    if (idx < 0 || idx >= MAX_PROCS) return 0;
+
+    /* PML4[0] → our PDPT (user-accessible so Ring 3 can traverse) */
+    proc_pml4[idx][0] = (uint64_t)proc_pdpt[idx] | 0x07;
+
+    /* PDPT[0] → our PD (user-accessible, contains user region) */
+    proc_pdpt[idx][0] = (uint64_t)proc_pd[idx] | 0x07;
+    /* PDPT[1-3] → shared kernel PDs (supervisor-only) */
+    proc_pdpt[idx][1] = (uint64_t)pd[1] | 0x03;
+    proc_pdpt[idx][2] = (uint64_t)pd[2] | 0x03;
+    proc_pdpt[idx][3] = (uint64_t)pd[3] | 0x03;
+
+    /* PD[0][0-511]: all supervisor-only except [4] = user page */
+    for (int j = 0; j < 512; j++) {
+        uint64_t addr = (uint64_t)j * 0x200000ULL;
+        proc_pd[idx][j] = addr | ((j == 4) ? 0x87 : 0x83);
+    }
+    /* Override: map virtual 0x800000 to the process's physical page */
+    proc_pd[idx][4] = user_phys_addr | 0x87;
+
+    return (uint64_t)proc_pml4[idx];
 }
 
 /* ===== Heap (bump allocator) ===== */

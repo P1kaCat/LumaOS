@@ -162,8 +162,23 @@ irq_common:
     mov rax, [sched_next]
     mov rsp, [rax]
 
+    /* Update TSS RSP0 + CR3 if next task is user (Ring 3) */
+    mov edx, [rax + 16]        /* is_user field */
+    test edx, edx
+    jz .no_tss_update
+
+    /* Set TSS RSP0 to task's kernel_rsp (per-process kernel stack) */
+    mov rdx, [rax + 24]        /* kernel_rsp field */
+    mov [tss + 4], rdx         /* tss.rsp0 = kernel_rsp */
+
+    /* Switch CR3 if task has its own page tables */
+    mov rdx, [rax + 32]        /* cr3 field */
+    test rdx, rdx
+    jz .no_tss_update
+    mov cr3, rdx
+
+.no_tss_update:
     /* current = next */
-    mov rax, [sched_next]
     mov [sched_current], rax
 
 .no_switch:

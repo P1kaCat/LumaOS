@@ -48,7 +48,7 @@
 - [x] Terminaison d'un processus
 - [x] Scheduler compatible avec les processus
 - [x] Syscall `exit`
-- [ ] Test QEMU création → exécution → terminaison
+- [ ] Test QEMU création → exécution → terminaison (code prêt, en attente de validation)
 - [ ] Plusieurs processus utilisateur simultanés
 - [ ] Espace mémoire propre à chaque processus
 - [ ] CR3 par processus

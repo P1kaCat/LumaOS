@@ -27,6 +27,8 @@ void sched_init(void) {
     tasks[0].state = PROC_READY;
     tasks[0].is_user = 0;
     tasks[0].rsp = 0;
+    tasks[0].kernel_rsp = 0;
+    tasks[0].cr3 = 0;  /* kernel task — no CR3 switch */
     num_tasks = 1;
     sched_current = &tasks[0];
     sched_next = &tasks[0];
@@ -39,6 +41,8 @@ void task_create(void (*entry)(void), int id) {
     t->id = id;
     t->state = PROC_READY;
     t->is_user = 0;
+    t->kernel_rsp = 0;
+    t->cr3 = 0;
 
     uint64_t *sp = &t->stack[TASK_STACK_QWORDS];
     sp -= 22;
@@ -53,13 +57,15 @@ void task_create(void (*entry)(void), int id) {
     t->rsp = (uint64_t)sp;
 }
 
-int proc_create_user(uint64_t code_addr, uint64_t stack_top) {
+int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3) {
     if (num_tasks >= MAX_TASKS) return -1;
     struct task *t = &tasks[num_tasks++];
     t->pid = next_pid++;
     t->id = t->pid;
     t->state = PROC_READY;
     t->is_user = 1;
+    t->kernel_rsp = (uint64_t)&t->stack[TASK_STACK_QWORDS]; /* per-process kernel stack */
+    t->cr3 = cr3;
 
     uint64_t *sp = &t->stack[TASK_STACK_QWORDS];
     sp -= 22;
@@ -101,7 +107,7 @@ void sched_tick(void) {
         if (tasks[nxt].state != PROC_TERMINATED) break;
         nxt = (nxt + 1) % num_tasks;
     }
-    if (nxt == cur) return;  /* no other ready task */
+    if (nxt == cur) return;
 
     sched_next = &tasks[nxt];
     sched_switch_pending = 1;
