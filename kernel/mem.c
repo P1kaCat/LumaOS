@@ -250,16 +250,6 @@ uint64_t get_page(uint64_t cr3, uint64_t va) {
 
 void free_user_pages(uint64_t cr3, uint64_t va_start, uint64_t va_end) {
     uint64_t *pml4_tbl = (uint64_t *)(unsigned long)cr3;
-    char buf[32];
-    uint64_t freed = 0;
-
-    serial_puts("[DBG] free_user_pages(0x");
-    serial_puts(uxtoa(cr3, buf));
-    serial_puts(", 0x");
-    serial_puts(uxtoa(va_start, buf));
-    serial_puts(", 0x");
-    serial_puts(uxtoa(va_end, buf));
-    serial_puts(")\n");
 
     for (uint64_t va = va_start; va < va_end; ) {
         uint64_t idx4 = (va >> 39) & 0x1FF;
@@ -267,18 +257,12 @@ void free_user_pages(uint64_t cr3, uint64_t va_start, uint64_t va_end) {
         uint64_t idx2 = (va >> 21) & 0x1FF;
 
         if (!(pml4_tbl[idx4] & PTE_PRESENT)) {
-            serial_puts("[DBG]   PML4[");
-            serial_puts(uitoa(idx4, buf));
-            serial_puts("] not present — skip\n");
             va = ((va >> 39) + 1) << 39;
             continue;
         }
         uint64_t *pdpt_tbl = (uint64_t *)(unsigned long)(pml4_tbl[idx4] & ~0xFFFULL);
 
         if (!(pdpt_tbl[idx3] & PTE_PRESENT)) {
-            serial_puts("[DBG]   PDPT[");
-            serial_puts(uitoa(idx3, buf));
-            serial_puts("] not present — skip\n");
             va = ((va >> 30) + 1) << 30;
             continue;
         }
@@ -289,9 +273,6 @@ void free_user_pages(uint64_t cr3, uint64_t va_start, uint64_t va_end) {
         uint64_t *pd_tbl = (uint64_t *)(unsigned long)(pdpt_tbl[idx3] & ~0xFFFULL);
 
         if (!(pd_tbl[idx2] & PTE_PRESENT)) {
-            serial_puts("[DBG]   PD[");
-            serial_puts(uitoa(idx2, buf));
-            serial_puts("] not present — skip\n");
             va = ((va >> 21) + 1) << 21;
             continue;
         }
@@ -303,37 +284,15 @@ void free_user_pages(uint64_t cr3, uint64_t va_start, uint64_t va_end) {
         uint64_t pt_phys = pd_tbl[idx2] & ~0xFFFULL;
         uint64_t *pt = (uint64_t *)(unsigned long)pt_phys;
 
-        serial_puts("[DBG]   PD[");
-        serial_puts(uitoa(idx2, buf));
-        serial_puts("] present, pt_phys=0x");
-        serial_puts(uxtoa(pt_phys, buf));
-        serial_puts("\n");
-
         for (int i = 0; i < 512; i++) {
             if (pt[i] & PTE_PRESENT) {
                 uint64_t pa = pt[i] & ~0xFFFULL;
-                serial_puts("[DBG]     PT[");
-                serial_puts(uitoa(i, buf));
-                serial_puts("] = 0x");
-                serial_puts(uxtoa(pt[i], buf));
-                serial_puts(" → free_page(0x");
-                serial_puts(uxtoa(pa, buf));
-                serial_puts(")\n");
                 free_page(pa);
-                freed++;
                 pt[i] = 0;
             }
         }
         free_page(pt_phys);
-        freed++;
-        serial_puts("[DBG]     freed PT page 0x");
-        serial_puts(uxtoa(pt_phys, buf));
-        serial_puts("\n");
         pd_tbl[idx2] = 0;
         va = ((va >> 21) + 1) << 21;
     }
-
-    serial_puts("[DBG] free_user_pages: freed ");
-    serial_puts(uitoa(freed, buf));
-    serial_puts(" pages\n");
 }

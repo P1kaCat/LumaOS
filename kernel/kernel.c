@@ -6,7 +6,6 @@
 #include "user.h"
 
 #define COM1 0x3F8
-static void serial_putc(char c) { __asm__ volatile ("outb %0, %1" : : "a"(c), "dN"((uint16_t)COM1)); }
 static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
     char tmp[32]; int i=0; while (n) { tmp[i++]='0'+(n%10); n/=10; }

@@ -103,7 +103,6 @@ int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3, uint6
 }
 
 void proc_terminate(int pid) {
-    serial_puts("[DBG] proc_terminate(pid) called\n");
     for (int i = 0; i < num_tasks; i++) {
         if (tasks[i].pid == pid && tasks[i].is_user) {
             tasks[i].state = PROC_TERMINATED;
