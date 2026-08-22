@@ -5,7 +5,20 @@
  * No DMA, no interrupts — pure polled PIO.
  */
 #include "ata.h"
-#include "cpu.h"  /* serial_puts, inb, outb, inw, outw, uitoa, uxtoa */
+#include "cpu.h"  /* serial_puts, inb, outb, inw */
+
+/* Local number-to-string helpers (kernel has no shared libc) */
+static char *uitoa(uint64_t n, char *buf) {
+    if (!n) { buf[0]='0'; buf[1]=0; return buf; }
+    char tmp[32]; int i=0; while (n) { tmp[i++]='0'+(n%10); n/=10; }
+    int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
+}
+static char *uxtoa(uint64_t n, char *buf) {
+    if (!n) { buf[0]='0'; buf[1]=0; return buf; }
+    char tmp[32]; int i=0; const char *h="0123456789ABCDEF";
+    while (n) { tmp[i++]=h[n&0xF]; n>>=4; }
+    int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
+}
 
 static uint64_t disk_sectors = 0;
 static int ata_present = 0;

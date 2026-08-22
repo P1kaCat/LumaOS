@@ -5,13 +5,14 @@
 #include "sched.h"
 #include "user.h"
 #include "ata.h"
+#include "fat32.h"
 
-char *uitoa(uint64_t n, char *buf) {
+static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
     char tmp[32]; int i=0; while (n) { tmp[i++]='0'+(n%10); n/=10; }
     int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
 }
-char *uxtoa(uint64_t n, char *buf) {
+static char *uxtoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
     char tmp[32]; int i=0; const char *h="0123456789ABCDEF";
     while (n) { tmp[i++]=h[n&0xF]; n>>=4; }
@@ -39,6 +40,46 @@ static void task1_main(void) {
 }
 static void task2_main(void) {
     for (;;) __asm__ volatile ("hlt" ::: "memory");
+}
+
+/* Phase 6: FAT32 directory listing callback */
+struct dir_list_ctx { int count; };
+
+static void dir_list_cb(const struct fat32_dir_entry *entry, void *ctx) {
+    char name[12];
+    /* Copy 8.3 name, format as NAME.EXT */
+    int j = 0;
+    for (int i = 0; i < 8; i++) {
+        if (entry->name[i] != ' ') name[j++] = entry->name[i];
+    }
+    if (entry->name[8] != ' ') {
+        name[j++] = '.';
+        for (int i = 8; i < 11; i++) {
+            if (entry->name[i] != ' ') name[j++] = entry->name[i];
+        }
+    }
+    name[j] = 0;
+
+    char buf[32];
+    serial_puts("  ");
+    serial_puts(name);
+    serial_puts("  (size=");
+    serial_puts(uitoa(entry->file_size, buf));
+    serial_puts(", cluster=");
+    uint32_t cluster = ((uint32_t)entry->cluster_hi << 16) | entry->cluster_lo;
+    serial_puts(uitoa(cluster, buf));
+    if (entry->attr & FAT32_ATTR_DIRECTORY) {
+        serial_puts(", DIR");
+    }
+    serial_puts(")\n");
+
+    struct dir_list_ctx *c = (struct dir_list_ctx *)ctx;
+    c->count++;
+}
+
+/* Check if ATA was initialized successfully */
+static int ata_present_check(void) {
+    return ata_get_sector_count() > 0;
 }
 
 void kernel_main(struct lumaos_handoff *ho) {
@@ -173,6 +214,27 @@ void kernel_main(struct lumaos_handoff *ho) {
                 serial_puts("  [!] Boot signature mismatch\n");
             }
         }
+    }
+
+    /* ---- Phase 6: FAT32 filesystem ---- */
+    if (ata_present_check()) {
+        serial_puts("\n[*] Initializing FAT32 filesystem...\n");
+        if (fat32_init() != 0) {
+            serial_puts("[!] FAT32 init failed — filesystem disabled\n");
+        } else {
+            /* List root directory */
+            serial_puts("[*] Root directory listing:\n");
+
+            struct dir_list_ctx ctx = {0};
+
+            fat32_list_root(dir_list_cb, &ctx);
+            serial_puts("  Total entries: ");
+            char dbuf[16];
+            serial_puts(uitoa(ctx.count, dbuf));
+            serial_puts("\n");
+        }
+    } else {
+        serial_puts("[*] FAT32 skipped — ATA not available\n");
     }
 
     /* ---- Phase 5: scheduler + shell ---- */

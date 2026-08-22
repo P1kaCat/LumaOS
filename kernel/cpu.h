@@ -68,10 +68,6 @@ struct registers;
 void syscall_handler(struct registers *regs);
 void serial_puts(const char *s);
 
-/* Integer to string (for kernel debug output) */
-char *uitoa(uint64_t n, char *buf);
-char *uxtoa(uint64_t n, char *buf);
-
 void gdt_init(void);
 
 /* ===== IDT ===== */
