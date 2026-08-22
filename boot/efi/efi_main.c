@@ -18,7 +18,7 @@
 
 #include "efi_types.h"
 #include "elf.h"
-#include "../handoff.h"  /* include/ au root du repo */
+#include "handoff.h"
 
 /* ===== Utilitaires ===== */
 
@@ -203,7 +203,7 @@ efi_status_t efi_main(efi_handle_t image_handle, struct efi_system_table *st) {
     ho->fb_format      = gop_info->pixel_format;
 
     /* Memory map */
-    ho->memory_map            = (uint64_t)(unsigned long long)(unsigned long)mmap_buffer;
+    ho->memory_map            = (uint64_t)(uintptr_t)mmap_buffer;
     ho->memory_map_size       = mmap_size;
     ho->memory_map_desc_size  = desc_size;
     ho->memory_map_desc_version = desc_version;
@@ -235,8 +235,8 @@ efi_status_t efi_main(efi_handle_t image_handle, struct efi_system_table *st) {
         "mov %0, %%rdi\n\t"   /* handoff pointer → RDI (System V ABI arg1) */
         "jmp *%1\n\t"         /* saut au kernel entry point */
         :
-        : "r"((unsigned long long)(unsigned long)ho),
-          "r"((unsigned long long)(unsigned long)kernel_entry)
+        : "r"((uint64_t)(uintptr_t)ho),
+          "r"((uint64_t)(uintptr_t)kernel_entry)
         : "rdi"
     );
 
