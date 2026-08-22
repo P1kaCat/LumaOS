@@ -88,32 +88,82 @@
 - [x] CR3 séparé par processus
 - [x] Page tables par processus
 - [x] Protection inter-processus
-- [x] Protection mémoire complète par processus (test accès kernel → PF)
-- [x] Libération des pages d'un processus à sa terminaison (free_user_pages, no leak)
+- [x] Protection mémoire complète par processus
+- [x] Libération des pages d'un processus à sa terminaison
+- [x] Détection de fuite mémoire
+- [x] Correction des collisions PID kernel/user
 
 ### Mémoire utilisateur
-- [x] Heap utilisateur (région dédiée 0x1000000, syscall `sbrk`)
-- [x] Allocation dynamique userland (sbrk + lazy mapping)
-- [x] Mapping de pages utilisateur à la demande (lazy allocation via PF handler)
-- [x] Page fault utilisateur exploitable (not-present vs protection violation)
-- [x] Stack utilisateur dynamique (région 0xA00000-0xC00000, croissance par PF)
+- [x] Heap utilisateur
+- [x] `sbrk`
+- [x] Allocation dynamique userland
+- [x] Lazy mapping via page fault
+- [x] Distinction page fault not-present / protection violation
+- [x] Stack utilisateur dynamique
+- [x] Croissance de stack via page fault
 
 ---
 
 ## Phase 5 — Syscalls & Userland
 **Statut : 🔄 En cours**
 
-- [ ] API syscall stable
-- [ ] `write` (déjà partiellement implémenté)
-- [ ] `read` (clavier)
+### API syscall
+- [x] Table syscall stabilisée
+- [x] `write`
+- [ ] `read`
 - [x] `exit`
-- [ ] `sleep`
 - [x] `getpid`
-- [x] `sbrk` (Phase 4)
-- [ ] Gestion des erreurs syscall
+- [x] `sbrk`
+- [x] `sleep`
+- [x] `yield`
+- [x] `getpages`
+- [x] Gestion des syscalls inconnus (`-1`)
+- [ ] Validation complète de tous les retours d'erreur
+
+### Clavier
+- [x] IRQ clavier
+- [x] Scancode Set 1
+- [x] Ring buffer clavier 256 octets
+- [x] Conversion scancode → caractère
+- [ ] Support correct du layout AZERTY
+- [ ] Gestion complète des touches avec Shift
+- [ ] Gestion propre des caractères spéciaux AZERTY
+
+### Scheduler / timing
+- [x] État `SLEEPING`
+- [x] `system_ticks`
+- [x] Réveil automatique des processus
+- [x] `sleep(ticks)`
+- [x] `yield()`
+- [x] Timer 50 Hz
+
+### Shell
+- [x] Shell userland Ring 3
+- [x] Prompt interactif
+- [x] Echo caractère par caractère
+- [x] Backspace
+- [x] Entrée / validation de commande
+- [x] `help`
+- [x] `pid`
+- [x] `mem`
+- [x] `sleep N`
+- [x] `exit`
+- [x] Conversion numérique `itoa`
+- [x] Parsing des commandes
+- [ ] Validation complète du clavier AZERTY
+- [ ] Correction du problème de caractères incorrects avec certaines touches
+
+### Mémoire / régression
+- [x] Régression Phase 4 depuis le shell
+- [x] Test de terminaison du shell
+- [ ] Corriger le leak de pages observé à la terminaison du shell
+- [ ] Valider `free pages: before == final`
+- [ ] Validation QEMU complète Phase 4 + Phase 5
+
+### Userland
 - [ ] Programme `init`
-- [ ] Shell minimal
 - [ ] Loader d'un programme user depuis un fichier
+- [ ] Première séparation propre init → shell
 
 ---
 
