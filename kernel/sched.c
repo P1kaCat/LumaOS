@@ -16,10 +16,6 @@ struct task *volatile sched_current;
 struct task *volatile sched_next;
 volatile uint64_t system_ticks = 0;
 
-static void outb(uint16_t port, uint8_t val) {
-    __asm__ volatile ("outb %0, %1" : : "a"(val), "dN"(port));
-}
-
 void pit_init(uint32_t freq) {
     uint16_t div = 1193182 / freq;
     outb(0x43, 0x36);

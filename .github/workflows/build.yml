@@ -1,0 +1,110 @@
+# LumaOS CI — Build validation + QEMU boot test
+#
+# Toolchain: LLVM/Clang + LLD (no NASM — all assembly is clang-integrated)
+# QEMU: UEFI boot via OVMF (files tracked in tools/ovmf/)
+#
+# Jobs:
+#   build     — make clean && make, verify artifacts
+#   qemu-test — boot in QEMU, check serial output for expected markers
+
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build (Clang + LLD)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain (Clang + LLD)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld
+
+      - name: Build kernel + bootloader + disk image
+        run: make clean && make
+
+      - name: Verify build artifacts
+        run: |
+          echo "Checking artifacts:"
+          test -f build/kernel/kernel.elf && echo "  ✓ kernel.elf" || { echo "  ✗ kernel.elf missing"; exit 1; }
+          test -f build/boot/BOOTX64.EFI && echo "  ✓ BOOTX64.EFI" || { echo "  ✗ BOOTX64.EFI missing"; exit 1; }
+          test -f build/disk.img && echo "  ✓ disk.img" || { echo "  ✗ disk.img missing"; exit 1; }
+          echo "All artifacts present."
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumaos-build
+          path: |
+            build/kernel/kernel.elf
+            build/boot/BOOTX64.EFI
+            build/disk.img
+          retention-days: 7
+
+  qemu-test:
+    name: QEMU Boot Test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain + QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld qemu-system-x86
+
+      - name: Build
+        run: make clean && make
+
+      - name: Boot in QEMU (30s timeout, serial capture)
+        run: |
+          # timeout kills make/QEMU after 30s (SIGTERM + SIGKILL after 5s)
+          # Serial output (-serial stdio) is captured via tee
+          timeout -k 5 30 make run 2>&1 | tee serial.log || true
+
+      - name: Verify serial output markers
+        run: |
+          echo "=== Serial output (last 100 lines) ==="
+          tail -100 serial.log
+          echo ""
+          echo "=== Checking boot markers ==="
+
+          fail=0
+          for marker in \
+            "LumaOS" \
+            "Kernel is alive!" \
+            "[ATA]" \
+            "[FAT32]" \
+            "Phase 4+5 regression test passed"
+          do
+            if grep -qF "$marker" serial.log; then
+              echo "  ✓ Found: $marker"
+            else
+              echo "  ✗ Missing: $marker"
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -eq 1 ]; then
+            echo ""
+            echo "::error::Boot test failed — one or more serial markers not found"
+            exit 1
+          fi
+
+          echo ""
+          echo "All boot markers found — LumaOS boots correctly in QEMU."
+
+      - name: Upload serial log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serial-output
+          path: serial.log
+          retention-days: 7
