@@ -183,8 +183,26 @@ void exception_handler(uint64_t int_no, uint64_t err_code) {
     for (;;) __asm__ volatile ("hlt");
 }
 
+static uint8_t inb(uint16_t port) {
+    uint8_t v;
+    __asm__ volatile ("inb %1, %0" : "=a"(v) : "dN"(port));
+    return v;
+}
+
+static uint64_t kbd_ticks = 0;
+
 void irq_default_handler(uint8_t irq) {
-    /* Par défaut, juste EOI */
+    if (irq == 1) {
+        /* Keyboard: read scancode from port 0x60 */
+        uint8_t sc = inb(0x60);
+        kbd_ticks++;
+        char buf[32];
+        serial_puts("[kbd] scancode=0x");
+        serial_puts(uxtoa((uint64_t)sc, buf));
+        serial_puts(" (");
+        serial_puts(uitoa(kbd_ticks, buf));
+        serial_puts(")\n");
+    }
     pic_eoi(irq);
 }
 

@@ -69,9 +69,9 @@
 - [x] ISR stubs en assembly (48 stubs: 32 exceptions + 16 IRQs)
 - [x] Exception handler C (dump serial + halt)
 - [x] Test QEMU : GDT + IDT + sti — VALIDÉ ✅
-- [ ] Page tables (4-level paging)
-- [ ] Heap allocator
-- [ ] Scheduler minimal
+- [x] Page tables (4-level paging) — 4GB identity-mapped, 2MB pages
+- [x] Heap allocator — bump allocator from UEFI conventional memory
+- [x] Keyboard interrupts (IRQ1 scancode reader)
 
 ## Stratégie de support matériel
 

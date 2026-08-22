@@ -20,9 +20,9 @@ KERNEL_BIN := $(BUILD_DIR)/kernel.elf
 
 all: $(KERNEL_BIN)
 
-$(KERNEL_BIN): $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o linker.ld
+$(KERNEL_BIN): $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o linker.ld
 	@mkdir -p $(BUILD_DIR)
-	$(LD) $(KERNEL_LDFLAGS) -o $@ $(BUILD_DIR)/boot.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/kernel.o
+	$(LD) $(KERNEL_LDFLAGS) -o $@ $(BUILD_DIR)/boot.o $(BUILD_DIR)/cpu.o $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/kernel.o
 	@echo "Kernel built: $@"
 
 $(BUILD_DIR)/kernel.o: kernel.c cpu.h ../include/handoff.h
@@ -34,6 +34,9 @@ $(BUILD_DIR)/cpu.o: cpu.c cpu.h ../include/handoff.h
 	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
 
 $(BUILD_DIR)/isr.o: isr.S cpu.h
+$(BUILD_DIR)/mem.o: mem.c mem.h ../include/handoff.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c mem.c -o $@
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(ASM_FLAGS) -c isr.S -o $@
 
