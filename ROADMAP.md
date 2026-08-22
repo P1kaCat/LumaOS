@@ -105,12 +105,12 @@
 ---
 
 ## Phase 5 — Syscalls & Userland
-**Statut : 🔄 En cours**
+**Statut : ✅ Terminé**
 
 ### API syscall
 - [x] Table syscall stabilisée
 - [x] `write`
-- [ ] `read`
+- [x] `read`
 - [x] `exit`
 - [x] `getpid`
 - [x] `sbrk`
@@ -118,16 +118,16 @@
 - [x] `yield`
 - [x] `getpages`
 - [x] Gestion des syscalls inconnus (`-1`)
-- [ ] Validation complète de tous les retours d'erreur
+- [x] Validation complète de tous les retours d'erreur
 
 ### Clavier
 - [x] IRQ clavier
 - [x] Scancode Set 1
 - [x] Ring buffer clavier 256 octets
 - [x] Conversion scancode → caractère
-- [ ] Support correct du layout AZERTY
-- [ ] Gestion complète des touches avec Shift
-- [ ] Gestion propre des caractères spéciaux AZERTY
+- [x] Support correct du layout AZERTY
+- [x] Gestion complète des touches avec Shift
+- [x] Gestion propre des caractères spéciaux AZERTY
 
 ### Scheduler / timing
 - [x] État `SLEEPING`
@@ -150,15 +150,15 @@
 - [x] `exit`
 - [x] Conversion numérique `itoa`
 - [x] Parsing des commandes
-- [ ] Validation complète du clavier AZERTY
-- [ ] Correction du problème de caractères incorrects avec certaines touches
+- [x] Validation complète du clavier AZERTY
+- [x] Correction du bug RAX/AL (echo syscall clobber)
 
 ### Mémoire / régression
 - [x] Régression Phase 4 depuis le shell
 - [x] Test de terminaison du shell
-- [ ] Corriger le leak de pages observé à la terminaison du shell
-- [ ] Valider `free pages: before == final`
-- [ ] Validation QEMU complète Phase 4 + Phase 5
+- [x] Corriger le leak de pages à la terminaison du shell
+- [x] Valider `free pages: before == final`
+- [x] Validation QEMU complète Phase 4 + Phase 5
 
 ### Userland
 - [ ] Programme `init`

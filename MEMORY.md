@@ -44,6 +44,9 @@ OS monocœur x86_64, long mode, identity mapping.
 - Croissance dynamique de la stack via page fault
 - Libération des pages user à la terminaison
 - Test de fuite mémoire présent
+- **Leak de 2 pages corrigé** : `free_user_pages()` libère stack data page + PT page
+- Test de mapping dynamique de Phase 4 nettoyé (PD + PT + data page freed après le test)
+- `free pages: before == final` validé en QEMU
 
 ### Scheduler
 
@@ -121,22 +124,25 @@ Interface actuelle via `int 0x80`, vector 128, DPL=3.
 - IRQ clavier activée
 - Scancode Set 1
 - Ring buffer de 256 octets
-- Conversion scancode → ASCII
-- Layout actuellement en cours d'adaptation vers **AZERTY français**
-- Le système a initialement utilisé une table US QWERTY
-- Support Shift / caractères spéciaux encore à finaliser
+- Conversion scancode → ASCII via **deux tables AZERTY FR** :
+  - `scancode_map[128]` : unshifted (lettres minuscules, & " ' ( - _ ) = ^ $ * , ; : !)
+  - `scancode_shift_map[128]` : shifted (chiffres 1-0, majuscules, + % ? . /)
+- Suivi de l'état Shift via scancodes 0x2A/0x36 (make) et 0xAA/0xB6 (break)
+- Caractères non-ASCII (é è ç à ù ²) ignorés en unshifted, digit/équivalent ASCII en Shift
+- Layout AZERTY natif, indépendant du layout Windows/QEMU
+- **Validé en QEMU** : help, pid, mem, sleep, exit fonctionnent avec clavier AZERTY
 
 ### Important
 
 Le clavier physique de développement est **AZERTY**.
 
-Le mapping clavier de LumaOS doit donc être pensé indépendamment du layout clavier de Windows/QEMU et utiliser une table AZERTY native pour les scancodes Set 1.
-
 ---
 
 ## Shell userland
 
-Programme actuel dans `user_code.S`.
+Programme actuel dans `user_code.S`, **validé en QEMU**.
+
+Bug historique corrigé : le syscall `write` (echo) clobber RAX, ce qui détruisait le caractère dans AL avant son stockage dans `cmd_buf`. Fix : store avant echo.
 
 Affichage au démarrage :
 
