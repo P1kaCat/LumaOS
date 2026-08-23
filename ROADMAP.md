@@ -13,7 +13,7 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (9 markers):
+- [x] Boot marker verification (10 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
@@ -224,6 +224,8 @@ Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
   - [x] Multi-cluster FAT32 file support (create_disk.py)
   - [x] Automated `[EXEC12] test passed` CI marker
   - [x] CI sendkey injection: `run prog.elf` typed in shell via QEMU monitor
+
+Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `f604616` (loader hardening + AZERTY dot fix)
 
 ---
 
