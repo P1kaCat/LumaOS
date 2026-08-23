@@ -1,21 +1,25 @@
 /* xhci.c — xHCI USB Host Controller Driver (Phase 7b.1)
  *
- * Phase 7b.1: Controller discovery + capability register reading.
+ * Phase 7b.1: Controller discovery + BAR analysis + MMIO mapping + capability reading.
  *
  * The xHCI controller is discovered via PCI class 0C/03/30.
- * On QEMU, adding `-device qemu-xhci` creates an xHCI controller
- * (typically Red Hat vendor 0x1B36, device 0x000C).
+ * On QEMU, `-device qemu-xhci` creates a controller
+ * (Red Hat vendor 0x1B36, device 0x000D).
  *
  * The controller's registers are MMIO-mapped at BAR0.
- * Since LumaOS uses identity mapping (physical = virtual) for the
- * first 4 GB with 2 MB pages, BAR0 addresses are directly accessible.
+ * OVMF may assign the BAR above 4 GB (e.g., 0x800000000 for a 64-bit BAR).
+ * The kernel identity-maps the first 4 GB with 2 MB pages, but
+ * map_page() can create 4 KB mappings at any address by walking
+ * the 4-level page table hierarchy and creating missing tables.
  *
- * This phase reads the xHCI capability registers to verify the
- * controller is present and understand its configuration. It does
- * not reset or configure the controller yet.
+ * We identity-map the BAR's physical address range using map_page(),
+ * then access the xHCI registers through the mapped virtual address.
+ *
+ *   PCI BAR (physical) → map_page(4KB) → identity VA → xHCI registers
  */
 #include "xhci.h"
 #include "cpu.h"
+#include "mem.h"
 
 /* ===== Helpers ===== */
 
@@ -23,14 +27,6 @@ static char *uitoa_local(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
     char tmp[32]; int i=0;
     while (n) { tmp[i++]='0'+(n%10); n/=10; }
-    int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
-}
-
-static char *uxtoa_local(uint64_t n, char *buf) {
-    if (!n) { buf[0]='0'; buf[1]=0; return buf; }
-    char tmp[32]; int i=0;
-    const char *h="0123456789ABCDEF";
-    while (n) { tmp[i++]=h[n&0xF]; n>>=4; }
     int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
 }
 
@@ -44,8 +40,8 @@ static char *uxtoa_pad(uint64_t n, char *buf, int width) {
 }
 
 /* MMIO register access — direct pointer dereference.
- * The kernel identity-maps the first 4 GB with 2 MB pages,
- * so PCI MMIO BARs (typically 0xFExxxxxx) are directly accessible. */
+ * The kernel identity-maps MMIO regions via map_page() (4 KB pages),
+ * so the physical address is also the virtual address. */
 static uint32_t xhci_read32(uint64_t base, uint32_t offset) {
     return *(volatile uint32_t *)(unsigned long)(base + offset);
 }
@@ -66,6 +62,42 @@ static int xhci_ffs(uint32_t x) {
     return n;
 }
 
+/* ===== BAR sizing ===== */
+
+/* Size a PCI BAR (32-bit or 64-bit).
+ * Writes 0xFFFFFFFF to the BAR(s), reads back the mask, restores original.
+ * Returns the BAR size in bytes, or 0 if the BAR is unused.
+ * For 64-bit BARs, sizes both BAR0 and BAR1. */
+static uint64_t xhci_bar_size(struct pci_device *dev) {
+    uint8_t off0 = 0x10;  /* BAR0 */
+    uint8_t off1 = 0x14;  /* BAR1 (upper 32 bits for 64-bit BAR) */
+
+    /* Save original values */
+    uint32_t orig0 = pci_config_read32(dev->bus, dev->device, dev->func, off0);
+    uint32_t orig1 = pci_config_read32(dev->bus, dev->device, dev->func, off1);
+
+    /* Write all 1s to both registers */
+    pci_config_write32(dev->bus, dev->device, dev->func, off0, 0xFFFFFFFF);
+    pci_config_write32(dev->bus, dev->device, dev->func, off1, 0xFFFFFFFF);
+
+    /* Read back the size masks */
+    uint32_t mask_lo = pci_config_read32(dev->bus, dev->device, dev->func, off0);
+    uint32_t mask_hi = pci_config_read32(dev->bus, dev->device, dev->func, off1);
+
+    /* Restore original values */
+    pci_config_write32(dev->bus, dev->device, dev->func, off0, orig0);
+    pci_config_write32(dev->bus, dev->device, dev->func, off1, orig1);
+
+    /* Clear lower 4 bits (type, prefetchable, enable) */
+    mask_lo &= 0xFFFFFFF0u;
+
+    if (mask_lo == 0 && mask_hi == 0) return 0;  /* BAR unused */
+
+    /* Combined 64-bit mask → size = ~mask + 1 */
+    uint64_t mask = ((uint64_t)mask_hi << 32) | mask_lo;
+    return ~mask + 1;
+}
+
 /* ===== Init ===== */
 
 void xhci_init(void) {
@@ -74,7 +106,6 @@ void xhci_init(void) {
     serial_puts("\n[*] Initializing xHCI USB host controller...\n");
 
     /* --- 1. Find the xHCI controller via PCI class --- */
-    /* Class 0x0C (Serial bus), Subclass 0x03 (USB), ProgIF 0x30 (xHCI) */
     struct pci_device *xhci = pci_find_class(0x0C, 0x03, 0x30);
     if (!xhci) {
         serial_puts("  [!] No xHCI controller found (PCI 0C/03/30)\n");
@@ -92,32 +123,110 @@ void xhci_init(void) {
     serial_puts(uxtoa_pad(xhci->device_id, buf, 4));
     serial_puts("\n");
 
-    /* --- 2. Read BAR0 (MMIO base address) --- */
+    /* --- 2. Analyze BAR0 --- */
     uint32_t bar0_raw = xhci->bars[0];
-    uint64_t mmio_base = bar0_raw & 0xFFFFFFF0u;  /* mask type + enable bits */
 
-    /* Check if it's a 64-bit BAR (BAR0 type = 0b10 in low 2 bits) */
-    if ((bar0_raw & 0x06) == 0x04) {
-        /* 64-bit BAR: upper 32 bits in BAR1 */
-        mmio_base |= ((uint64_t)xhci->bars[1] << 32);
-    }
-
-    serial_puts("  BAR0 raw=0x");
-    serial_puts(uxtoa_pad(bar0_raw, buf, 8));
-    serial_puts(" -> MMIO base=0x");
-    serial_puts(uxtoa_pad(mmio_base, buf, 8));
-    serial_puts("\n");
-
-    if (!mmio_base) {
+    if (!bar0_raw) {
         serial_puts("  [!] BAR0 is zero — device not configured by BIOS\n");
         return;
     }
 
-    /* --- 3. Enable the PCI device (Memory Space + Bus Master) --- */
+    /* Decode BAR type bits */
+    int is_io       = bar0_raw & 0x01;            /* bit 0: 0=Memory, 1=I/O */
+    int bar_type    = (bar0_raw >> 1) & 0x03;      /* bits 2:1: 00=32-bit, 10=64-bit (for Memory) */
+    int is_prefetch = (bar0_raw >> 3) & 0x01;      /* bit 3: prefetchable */
+    int is_64bit    = (!is_io && bar_type == 2);   /* 64-bit memory BAR */
+
+    /* Compute full MMIO base address */
+    uint64_t mmio_base = bar0_raw & 0xFFFFFFF0u;  /* clear type bits */
+    if (is_64bit) {
+        uint32_t bar1_raw = xhci->bars[1];
+        mmio_base |= (uint64_t)bar1_raw << 32;
+    }
+
+    /* Print BAR analysis */
+    serial_puts("  BAR0: ");
+    serial_puts(is_io ? "I/O" : "Memory");
+    serial_puts(is_64bit ? " 64-bit" : " 32-bit");
+    serial_puts(is_prefetch ? " prefetchable" : " non-prefetchable");
+    serial_puts("\n");
+    serial_puts("    raw=0x");
+    serial_puts(uxtoa_pad(bar0_raw, buf, 8));
+    if (is_64bit) {
+        serial_puts(" BAR1 raw=0x");
+        serial_puts(uxtoa_pad(xhci->bars[1], buf, 8));
+    }
+    serial_puts("\n");
+    serial_puts("    base=0x");
+    serial_puts(uxtoa_pad(mmio_base, buf, 16));
+    serial_puts("\n");
+
+    /* --- 3. Size the BAR --- */
+    uint64_t bar_size = xhci_bar_size(xhci);
+    uint64_t num_pages = (bar_size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    serial_puts("    size=0x");
+    serial_puts(uxtoa_pad(bar_size, buf, 8));
+    serial_puts(" (");
+    serial_puts(uitoa_local(bar_size, buf));
+    serial_puts(" bytes, ");
+    serial_puts(uitoa_local(num_pages, buf));
+    serial_puts(" page");
+    serial_puts(num_pages > 1 ? "s" : "");
+    serial_puts(")\n");
+
+    if (!bar_size) {
+        serial_puts("  [!] BAR0 size is zero — BAR not implemented?\n");
+        return;
+    }
+
+    /* --- 4. Enable the PCI device --- */
     pci_enable_device(xhci);
     serial_puts("  [+] PCI device enabled (Memory Space + Bus Master)\n");
 
-    /* --- 4. Read xHCI capability registers --- */
+    /* --- 5. Identity-map the BAR's physical address range --- *
+     *
+     * The kernel's paging_init() identity-maps the first 4 GB with 2 MB
+     * large pages. For BARs above 4 GB (like 0x800000000), we extend the
+     * page table hierarchy by creating 4 KB identity mappings (VA = PA)
+     * using map_page(). This walks PML4 → PDPT → PD → PT and allocates
+     * missing tables via alloc_page().
+     *
+     * MMIO pages are supervisor-only (no PTE_USER) and writable.
+     */
+    uint64_t cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+    cr3 &= ~0xFFFULL;
+
+    int mapped = 0;
+    for (uint64_t i = 0; i < num_pages; i++) {
+        uint64_t pa = mmio_base + i * PAGE_SIZE;
+        int ret = map_page(cr3, pa, pa, PTE_PRESENT | PTE_WRITABLE);
+        if (ret != 0) {
+            serial_puts("  [!] map_page() failed at 0x");
+            serial_puts(uxtoa_pad(pa, buf, 16));
+            serial_puts(" (ret=");
+            serial_puts(uitoa_local(ret, buf));
+            serial_puts(")\n");
+            break;
+        }
+        mapped++;
+    }
+
+    if (mapped == 0) {
+        serial_puts("  [!] Failed to map any MMIO pages\n");
+        return;
+    }
+
+    serial_puts("  [+] MMIO identity-mapped: ");
+    serial_puts(uitoa_local(mapped, buf));
+    serial_puts(" page");
+    serial_puts(mapped > 1 ? "s" : "");
+    serial_puts(" at 0x");
+    serial_puts(uxtoa_pad(mmio_base, buf, 16));
+    serial_puts("\n");
+
+    /* --- 6. Read xHCI capability registers --- */
     uint8_t  cap_length = xhci_read8(mmio_base, XHCI_CAPLENGTH);
     uint16_t hci_version = xhci_read16(mmio_base, XHCI_HCIVERSION);
     uint32_t hcs_params1 = xhci_read32(mmio_base, XHCI_HCSPARAMS1);
@@ -145,7 +254,6 @@ void xhci_init(void) {
     serial_puts(")\n");
 
     serial_puts("    HCIVERSION=0x");
-    /* BCD version: e.g. 0x0100 = 1.00, 0x0110 = 1.10 */
     serial_puts(uxtoa_pad(hci_version >> 8, buf, 2));
     serial_puts(".");
     serial_puts(uxtoa_pad(hci_version & 0xFF, buf, 2));
@@ -180,7 +288,7 @@ void xhci_init(void) {
     serial_puts(uxtoa_pad(rtsoff, buf, 8));
     serial_puts("\n");
 
-    /* --- 5. Read operational registers (at MMIO base + CAPLENGTH) --- */
+    /* --- 7. Read operational registers (at MMIO base + CAPLENGTH) --- */
     uint64_t op_base = mmio_base + cap_length;
     uint32_t usbcmd = xhci_read32(op_base, XHCI_USBCMD);
     uint32_t usbsts = xhci_read32(op_base, XHCI_USBSTS);
@@ -193,6 +301,7 @@ void xhci_init(void) {
     serial_puts(uxtoa_pad(usbsts, buf, 8));
     serial_puts(usbsts & XHCI_USBSTS_HCH ? " (Halted)" : " (Running)");
     serial_puts("\n");
+
     serial_puts("    PAGESIZE=0x");
     serial_puts(uxtoa_pad(pagesize, buf, 8));
     if (pagesize) {

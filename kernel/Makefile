@@ -94,6 +94,6 @@ clean:
 	@rm -rf $(BUILD_DIR)
 	@echo "Kernel build cleaned"
 
-$(BUILD_DIR)/xhci.o: xhci.c xhci.h pci.h cpu.h
+$(BUILD_DIR)/xhci.o: xhci.c xhci.h pci.h cpu.h mem.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c xhci.c -o $@
