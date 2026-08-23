@@ -226,6 +226,20 @@ void xhci_init(void) {
     serial_puts(uxtoa_pad(mmio_base, buf, 16));
     serial_puts("\n");
 
+    /* --- 5b. Hex dump of first 64 bytes for diagnostic --- */
+    serial_puts("  MMIO hex dump (first 64 bytes):\n");
+    for (int row = 0; row < 4; row++) {
+        serial_puts("    ");
+        serial_puts(uxtoa_pad((uint64_t)(row * 16), buf, 4));
+        serial_puts(": ");
+        for (int col = 0; col < 16; col++) {
+            uint8_t b = xhci_read8(mmio_base, row * 16 + col);
+            serial_puts(uxtoa_pad(b, buf, 2));
+            serial_puts(" ");
+        }
+        serial_puts("\n");
+    }
+
     /* --- 6. Read xHCI capability registers --- */
     uint8_t  cap_length = xhci_read8(mmio_base, XHCI_CAPLENGTH);
     uint16_t hci_version = xhci_read16(mmio_base, XHCI_HCIVERSION);
