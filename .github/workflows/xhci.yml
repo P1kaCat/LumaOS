@@ -1,0 +1,42 @@
+name: xHCI Driver Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  xhci-test:
+    name: xHCI Reset + Rings
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain + QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld qemu-system-x86
+
+      - name: Build
+        run: make clean && make
+
+      - name: Boot and verify xHCI marker
+        run: |
+          cp tools/ovmf/OVMF_VARS.fd build/ovmf_vars.fd
+          qemu-system-x86_64 \
+            -display none \
+            -no-reboot \
+            -drive if=pflash,format=raw,unit=0,file=tools/ovmf/OVMF_CODE.fd,readonly=on \
+            -drive if=pflash,format=raw,unit=1,file=build/ovmf_vars.fd \
+            -drive file=fat:rw:build/efi_root,format=raw,media=disk \
+            -drive file=build/disk.img,format=raw,if=ide,index=1 \
+            -device qemu-xhci \
+            -serial file:serial.log &
+          QEMU_PID=$!
+          sleep 12
+          kill $QEMU_PID 2>/dev/null || true
+          wait $QEMU_PID 2>/dev/null || true
+          cat serial.log
+          grep -qF '[XHCI7b2] reset + rings ready' serial.log
