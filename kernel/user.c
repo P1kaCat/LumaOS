@@ -28,6 +28,16 @@ extern const unsigned char shell_code_end[];
 /* Maximum ELF file size we can load (16 KB) */
 #define ELF_BUF_SIZE 16384
 
+/* User zone boundaries — segments must fall within [USER_ZONE_START, USER_ZONE_END).
+ * This covers the PD entries that create_user_pml4 zeroes for dynamic mapping:
+ *   j=4  (0x800000–0x9FFFFF)  code
+ *   j=5  (0xA00000–0xBFFFFF)  stack
+ *   j=8  (0x1000000–0x11FFFFF) heap
+ *   j=9  (0x1200000–0x13FFFFF) heap
+ * Total: 0x800000 to 0x13FFFFF = 12 MB */
+#define USER_ZONE_START  0x800000ULL
+#define USER_ZONE_END    0x1400000ULL
+
 static int next_proc_idx = 0;
 
 static void copy_code(uint64_t phys_addr, const unsigned char *start, const unsigned char *end) {
@@ -121,17 +131,100 @@ static int elf_validate_header(const struct elf64_ehdr *eh) {
         serial_puts("[!] ELF: bad phentsize\n");
         return -1;
     }
+    if (eh->e_phnum == 0) {
+        serial_puts("[!] ELF: no program headers\n");
+        return -1;
+    }
     return 0;
 }
 
 /* Convert ELF p_flags to page table flags.
  * PF_R → PRESENT | USER
  * PF_W → add WRITABLE
- * PF_X → (no NX bit yet — all pages executable) */
+ * PF_X → (no NX bit yet — all pages are executable)
+ *
+ * NOTE: Without NX (No-Execute) support in the paging system, all mapped
+ * pages are executable. A proper W^X enforcement requires setting the NXE
+ * bit in EFER and using bit 63 of PTEs. This is a known limitation. */
 static uint64_t elf_flags_to_pte(uint32_t p_flags) {
     uint64_t flags = PTE_PRESENT | PTE_USER;
     if (p_flags & PF_W) flags |= PTE_WRITABLE;
     return flags;
+}
+
+/* Quick unsigned decimal printer to serial */
+static void serial_putu(uint64_t v) {
+    char buf[20];
+    int i = 0;
+    if (v == 0) { serial_puts("0"); return; }
+    while (v) { buf[i++] = '0' + (v % 10); v /= 10; }
+    while (i) {
+        char tmp[2]; tmp[0] = buf[--i]; tmp[1] = 0;
+        serial_puts(tmp);
+    }
+}
+
+/* Quick hex printer to serial */
+static void serial_puthex(uint64_t v) {
+    char buf[20];
+    int i = 0;
+    if (v == 0) { serial_puts("0"); return; }
+    while (v) { buf[i++] = "0123456789ABCDEF"[v & 0xF]; v >>= 4; }
+    while (i) {
+        char tmp[2]; tmp[0] = buf[--i]; tmp[1] = 0;
+        serial_puts(tmp);
+    }
+}
+
+/* Validate a PT_LOAD segment.
+ * Returns 0 on success, -1 on failure. */
+static int elf_validate_segment(const struct elf64_phdr *ph, int file_size) {
+    /* p_memsz == 0 → empty segment, skip */
+    if (ph->p_memsz == 0) return -1;
+
+    /* p_filesz must not exceed p_memsz */
+    if (ph->p_filesz > ph->p_memsz) {
+        serial_puts("[!] ELF: p_filesz > p_memsz\n");
+        return -1;
+    }
+
+    /* Overflow check: p_vaddr + p_memsz must not wrap around */
+    if (ph->p_vaddr + ph->p_memsz < ph->p_vaddr) {
+        serial_puts("[!] ELF: p_vaddr + p_memsz overflow\n");
+        return -1;
+    }
+
+    /* Overflow check: p_offset + p_filesz must not wrap around */
+    if (ph->p_offset + ph->p_filesz < ph->p_offset) {
+        serial_puts("[!] ELF: p_offset + p_filesz overflow\n");
+        return -1;
+    }
+
+    /* Segment must be within the user zone */
+    if (ph->p_vaddr < USER_ZONE_START) {
+        serial_puts("[!] ELF: p_vaddr below user zone (0x");
+        serial_puthex(ph->p_vaddr);
+        serial_puts(" < 0x");
+        serial_puthex(USER_ZONE_START);
+        serial_puts(")\n");
+        return -1;
+    }
+    if (ph->p_vaddr + ph->p_memsz > USER_ZONE_END) {
+        serial_puts("[!] ELF: segment end beyond user zone (0x");
+        serial_puthex(ph->p_vaddr + ph->p_memsz);
+        serial_puts(" > 0x");
+        serial_puthex(USER_ZONE_END);
+        serial_puts(")\n");
+        return -1;
+    }
+
+    /* File data must be within the file */
+    if (ph->p_offset + ph->p_filesz > (uint64_t)file_size) {
+        serial_puts("[!] ELF: segment data exceeds file size\n");
+        return -1;
+    }
+
+    return 0;
 }
 
 /* Load a single PT_LOAD segment: allocate pages, copy file data, zero-fill bss,
@@ -139,44 +232,26 @@ static uint64_t elf_flags_to_pte(uint32_t p_flags) {
  * Returns 0 on success, -1 on failure (does not clean up on failure — caller handles). */
 static int elf_load_segment(const struct elf64_phdr *ph, const uint8_t *elf_buf,
                             int file_size, uint64_t cr3) {
+    /* Validate segment before loading */
+    if (elf_validate_segment(ph, file_size) != 0) {
+        return -1;
+    }
+
     uint64_t first_page = ph->p_vaddr & ~(PAGE_SIZE - 1);
-    uint64_t last_byte  = ph->p_vaddr + ph->p_memsz;
-    if (last_byte == 0) return -1;  /* empty segment */
+    uint64_t last_byte  = ph->p_vaddr + ph->p_memsz;  /* validated, no overflow */
     uint64_t last_page  = (last_byte - 1) & ~(PAGE_SIZE - 1);
 
     uint64_t pte_flags = elf_flags_to_pte(ph->p_flags);
 
     serial_puts("  [+] PT_LOAD: vaddr=0x");
-    /* quick hex print */
-    {
-        char hexbuf[20];
-        int hi = 0;
-        uint64_t v = ph->p_vaddr;
-        char tmp[16]; int ti = 0;
-        while (v) { tmp[ti++] = "0123456789ABCDEF"[v & 0xF]; v >>= 4; }
-        if (ti == 0) { hexbuf[0] = '0'; hi = 1; }
-        while (ti) hexbuf[hi++] = tmp[--ti];
-        hexbuf[hi] = 0;
-        serial_puts(hexbuf);
-        serial_puts(" filesz=");
-        /* decimal print */
-        char dbuf[16]; int di = 0; uint64_t f = ph->p_filesz;
-        char dt[16]; int dti = 0;
-        while (f) { dt[dti++] = '0' + (f % 10); f /= 10; }
-        if (dti == 0) { dbuf[0] = '0'; di = 1; }
-        while (dti) dbuf[di++] = dt[--dti];
-        dbuf[di] = 0;
-        serial_puts(dbuf);
-        serial_puts(" memsz=");
-        char mbuf[16]; int mi = 0; uint64_t m = ph->p_memsz;
-        char mt[16]; int mti = 0;
-        while (m) { mt[mti++] = '0' + (m % 10); m /= 10; }
-        if (mti == 0) { mbuf[0] = '0'; mi = 1; }
-        while (mti) mbuf[mi++] = mt[--mti];
-        mbuf[mi] = 0;
-        serial_puts(mbuf);
-        serial_puts("\n");
-    }
+    serial_puthex(ph->p_vaddr);
+    serial_puts(" filesz=");
+    serial_putu(ph->p_filesz);
+    serial_puts(" memsz=");
+    serial_putu(ph->p_memsz);
+    serial_puts(" flags=");
+    serial_putu(ph->p_flags);
+    serial_puts("\n");
 
     for (uint64_t va = first_page; va <= last_page; va += PAGE_SIZE) {
         /* Allocate a physical page */
@@ -193,7 +268,7 @@ static int elf_load_segment(const struct elf64_phdr *ph, const uint8_t *elf_buf,
 
         /* Calculate overlap between file data and this page */
         uint64_t file_vstart = ph->p_vaddr;
-        uint64_t file_vend   = ph->p_vaddr + ph->p_filesz;
+        uint64_t file_vend   = ph->p_vaddr + ph->p_filesz;  /* <= p_memsz, no overflow */
         uint64_t page_start  = va;
         uint64_t page_end    = va + PAGE_SIZE;
 
@@ -205,9 +280,9 @@ static int elf_load_segment(const struct elf64_phdr *ph, const uint8_t *elf_buf,
             uint64_t page_off = copy_start - page_start;
             uint64_t copy_len = copy_end - copy_start;
 
-            /* Bounds check */
+            /* Bounds check (redundant — validated in elf_validate_segment) */
             if (file_off + copy_len > (uint64_t)file_size) {
-                serial_puts("[!] ELF: segment exceeds file\n");
+                serial_puts("[!] ELF: segment exceeds file (internal)\n");
                 free_page(phys);
                 return -1;
             }
@@ -220,7 +295,9 @@ static int elf_load_segment(const struct elf64_phdr *ph, const uint8_t *elf_buf,
 
         /* Map physical page at virtual address with segment permissions */
         if (map_page(cr3, va, phys, pte_flags) != 0) {
-            serial_puts("[!] ELF: map_page failed\n");
+            serial_puts("[!] ELF: map_page failed @0x");
+            serial_puthex(va);
+            serial_puts("\n");
             free_page(phys);
             return -1;
         }
@@ -272,16 +349,8 @@ int spawn_file(const char *path) {
     }
 
     serial_puts("[+] ELF file loaded: ");
-    {
-        char dbuf[16]; int di = 0; uint64_t f = total;
-        char dt[16]; int dti = 0;
-        while (f) { dt[dti++] = '0' + (f % 10); f /= 10; }
-        if (dti == 0) { dbuf[0] = '0'; di = 1; }
-        while (dti) dbuf[di++] = dt[--dti];
-        dbuf[di] = 0;
-        serial_puts(dbuf);
-        serial_puts(" bytes\n");
-    }
+    serial_putu(total);
+    serial_puts(" bytes\n");
 
     /* Validate ELF64 header */
     struct elf64_ehdr *ehdr = (struct elf64_ehdr *)elf_buf;
@@ -291,20 +360,18 @@ int spawn_file(const char *path) {
 
     serial_puts("[+] ELF header valid (x86_64 ET_EXEC)\n");
     serial_puts("[+] Entry point: 0x");
-    {
-        char hexbuf[20]; int hi = 0; uint64_t v = ehdr->e_entry;
-        char tmp[16]; int ti = 0;
-        while (v) { tmp[ti++] = "0123456789ABCDEF"[v & 0xF]; v >>= 4; }
-        if (ti == 0) { hexbuf[0] = '0'; hi = 1; }
-        while (ti) hexbuf[hi++] = tmp[--ti];
-        hexbuf[hi] = 0;
-        serial_puts(hexbuf);
-        serial_puts("\n");
-    }
+    serial_puthex(ehdr->e_entry);
+    serial_puts("\n");
 
     /* Validate program header table fits in buffer */
     if (ehdr->e_phoff + (uint64_t)ehdr->e_phnum * ehdr->e_phentsize > (uint64_t)total) {
         serial_puts("[!] ELF: program headers exceed file\n");
+        return -1;
+    }
+
+    /* Validate entry point is within user zone */
+    if (ehdr->e_entry < USER_ZONE_START || ehdr->e_entry >= USER_ZONE_END) {
+        serial_puts("[!] ELF: entry point outside user zone\n");
         return -1;
     }
 
@@ -325,7 +392,9 @@ int spawn_file(const char *path) {
             continue;
 
         if (elf_load_segment(phdr, elf_buf, total, cr3) != 0) {
-            serial_puts("[!] ELF: segment load failed\n");
+            serial_puts("[!] ELF: segment load failed (phdr #");
+            serial_putu(i);
+            serial_puts(")\n");
             return -1;
         }
         seg_count++;
@@ -336,7 +405,9 @@ int spawn_file(const char *path) {
         return -1;
     }
 
-    serial_puts("[+] All PT_LOAD segments mapped\n");
+    serial_puts("[+] All PT_LOAD segments mapped (");
+    serial_putu(seg_count);
+    serial_puts(" segments)\n");
 
     /* Allocate and map user stack page */
     uint64_t stack_page = alloc_page();
@@ -355,6 +426,10 @@ int spawn_file(const char *path) {
         return -1;
     }
 
-    serial_puts("[+] ELF process spawned\n");
+    serial_puts("[+] ELF process spawned (PID=");
+    serial_putu(pid);
+    serial_puts(", RIP=0x");
+    serial_puthex(ehdr->e_entry);
+    serial_puts(")\n");
     return pid;
 }

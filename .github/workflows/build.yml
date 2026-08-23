@@ -141,11 +141,11 @@ jobs:
           # Type "cat hello.txt" + Enter
           # c=0x2E, a->'q'(0x10), t=0x14, spc=0x39,
           # h=0x23, e=0x12, l=0x26, l=0x26, o=0x18,
-          # .=shift+semicolon(0x33), t=0x14, x=0x2D, t=0x14
+          # .=dot(0x34), t=0x14, x=0x2D, t=0x14
           cat_keys = [
               'c', 'q', 't', 'spc',
               'h', 'e', 'l', 'l', 'o',
-              'shift-semicolon',
+              'dot',
               't', 'x', 't', 'ret'
           ]
           for key in cat_keys:
@@ -159,11 +159,11 @@ jobs:
           # Loads and executes the ELF64 program from FAT32 via syscall 12
           # r=0x13, u=0x16, n=0x31, spc=0x39,
           # p=0x19, r=0x13, o=0x18, g=0x22,
-          # .=shift+semicolon(0x33), e=0x12, l=0x26, f=0x21
+          # .=dot(0x34), e=0x12, l=0x26, f=0x21
           run_keys = [
               'r', 'u', 'n', 'spc',
               'p', 'r', 'o', 'g',
-              'shift-semicolon',
+              'dot',
               'e', 'l', 'f', 'ret'
           ]
           for key in run_keys:

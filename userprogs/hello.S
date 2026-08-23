@@ -1,20 +1,22 @@
-/* userprogs/hello.S — Standalone LumaOS user program
+/* userprogs/hello.S — Standalone LumaOS user program (ELF64)
  *
  * Loaded from FAT32 disk via spawn_file() / syscall 12 (exec).
- * Flat binary linked at 0x800000 (USER_CODE_ADDR).
+ * Linked as a proper ELF64 executable at 0x800000 with two PT_LOAD
+ * segments (text R+X, data R+W) via userprog.ld.
  *
- * Demonstrates file-based program loading:
- *   - Kernel reads PROG.BIN from FAT32 filesystem
- *   - Maps it into a new process address space
- *   - Process executes and prints a message
- *   - Process exits cleanly
+ * The ELF64 loader:
+ *   - Reads PROG.ELF from FAT32 filesystem via VFS
+ *   - Validates ELF header (magic, class, endianness, type, machine)
+ *   - Parses PT_LOAD program headers
+ *   - Allocates pages, maps at p_vaddr with PF_R/PF_W/PF_X permissions
+ *   - Copies p_filesz bytes from file, zero-fills p_memsz - p_filesz
+ *   - Sets RIP = e_entry, creates Ring 3 process
  *
  * Syscalls used: write(0), exit(1)
  *
  * Build:
  *   clang --target=x86_64-unknown-none -ffreestanding -nostdlib -c hello.S -o hello.o
  *   ld.lld -T userprog.ld -nostdlib --oformat elf64-x86-64 -o hello.elf hello.o
- *   llvm-objcopy -O binary hello.elf hello.bin
  */
 .text
 .global _start
