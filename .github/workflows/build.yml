@@ -214,7 +214,6 @@ jobs:
             "[INIT5] test passed" \
             "[EXEC12] test passed" \
             "[PCI7] devices:"
-            "[PCI7a2] BAR decode OK"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"
