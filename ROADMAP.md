@@ -13,12 +13,13 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (7 markers):
+- [x] Boot marker verification (9 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
+  - `[CAT6] test passed`, `[INIT5] test passed`
 - [x] Serial log artifact upload on failure
 
-Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers)
+Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers), `c15678e` (added [INIT5] marker), `8065462` (added [CAT6] marker + cat sendkey)
 
 ---
 
@@ -153,10 +154,12 @@ Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display 
 - [x] `free pages: before == final`
 - [x] Full Phase 4 + Phase 5 QEMU validation
 
-### Remaining userland work
-- [ ] `init` program
+### Init → Shell process model
+- [x] `init` program (PID 1, runs regression tests then spawns shell)
+- [x] Clean `init → shell` separation (init_code.S + shell_code.S)
+- [x] Syscall 11 (`spawn`) — init spawns shell as PID 2
+- [x] `[INIT5] test passed` CI marker
 - [ ] User program loader from a file
-- [ ] Clean `init → shell` separation
 
 ---
 
@@ -202,8 +205,11 @@ Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
 - [x] Ring 3 regression test (10 tests, `[SYSCALL6] test passed`)
 - [x] Large page fix: `get_page()` handles 2MB/1GB pages (PTE_PS)
 
-### Userland — ⬜ Not started
-- [ ] `cat hello.txt` shell command
+### Userland — 🔄 In Progress
+- [x] `cat hello.txt` shell command (open → read loop → write → close)
+- [x] Error handling: file not found, read error, EOF
+- [x] Automated `[CAT6] test passed` CI marker (init_code.S)
+- [x] CI sendkey injection: `cat hello.txt` typed in shell via QEMU monitor
 - [ ] File-based user program loader
 
 ---
