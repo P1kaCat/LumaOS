@@ -66,10 +66,11 @@ static const char scancode_map[128] = {
     [0x26] = 'l', [0x27] = 'm',
     /* 0x28: ù → not ASCII, skip */
     [0x29] = '*',
-    /* Bottom row: wxcvbn , ; : ! */
+    /* Bottom row: wxcvbn , ; . ! */
+    /* 0x34 = . instead of AZERTY : — QEMU/Windows sends QWERTY position scancode for . */
     [0x2C] = 'w', [0x2D] = 'x', [0x2E] = 'c', [0x2F] = 'v',
     [0x30] = 'b', [0x31] = 'n',
-    [0x32] = ',', [0x33] = ';', [0x34] = ':', [0x35] = '!',
+    [0x32] = ',', [0x33] = ';', [0x34] = '.', [0x35] = '!',
     [0x39] = ' ',
 };
 
@@ -100,10 +101,10 @@ static const char scancode_shift_map[128] = {
     [0x26] = 'L', [0x27] = 'M',
     [0x28] = '%',  /* ù shifted → % */
     [0x29] = '*',  /* µ → not ASCII, keep * */
-    /* Bottom row: WXCVBN ? . / */
+    /* Bottom row: WXCVBN ? . . */
     [0x2C] = 'W', [0x2D] = 'X', [0x2E] = 'C', [0x2F] = 'V',
     [0x30] = 'B', [0x31] = 'N',
-    [0x32] = '?', [0x33] = '.', [0x34] = '/',
+    [0x32] = '?', [0x33] = '.', [0x34] = '.',
     /* 0x35: § → not ASCII, skip */
     [0x39] = ' ',
 };
