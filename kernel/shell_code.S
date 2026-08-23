@@ -1,6 +1,7 @@
-/* user_code.S — LumaOS Shell v0.1 (Phase 5)
+/* shell_code.S — LumaOS Shell v0.1 (Phase 5)
  *
- * Interactive shell with built-in commands:
+ * Interactive shell — spawned by init (PID 2).
+ * Built-in commands:
  *   help     - Show available commands
  *   pid      - Print current PID
  *   mem      - Show free page count
@@ -11,10 +12,10 @@
  *           read(4), sleep(5), yield(6), getpages(7)
  */
 .text
-.global user_code_start
-.global user_code_end
+.global shell_code_start
+.global shell_code_end
 
-user_code_start:
+shell_code_start:
     /* ---- Print welcome ---- */
     leaq msg_welcome(%rip), %rdi
     xorq %rax, %rax
@@ -27,211 +28,6 @@ user_code_start:
     int $0x80
 
     /* ---- Main shell loop ---- */
-
-    /* ---- Phase 6: Filesystem syscall regression test ----
-     * Exercises syscalls 8 (open), 9 (close), 10 (read) from Ring 3.
-     * Marker: "[SYSCALL6] test passed" for CI.
-     */
-    xorq %r12, %r12          /* R12 = 0 (all passed) */
-
-    leaq msg_syscall6_start(%rip), %rdi
-    xorq %rax, %rax
-    movq $32, %rsi
-    int $0x80
-
-    /* Test 1: open("hello.txt") */
-    movq $8, %rax
-    leaq path_hello(%rip), %rdi
-    int $0x80
-    cmpq $0, %rax
-    jl .st_fail_open
-    movq %rax, %r13          /* save fd */
-
-    /* Test 2: read(fd, test_buf, 255) */
-    movq $10, %rax
-    movq %r13, %rdi
-    leaq test_buf(%rip), %rsi
-    movq $255, %rdx
-    int $0x80
-    cmpq $0, %rax
-    jl .st_fail_read
-    movq %rax, %r14          /* save byte count */
-    leaq msg_st_read_ok(%rip), %rdi
-    xorq %rax, %rax
-    movq $22, %rsi
-    int $0x80
-    movq $0, %rax
-    leaq test_buf(%rip), %rdi
-    movq %r14, %rsi
-    int $0x80
-    leaq nl_str(%rip), %rdi
-    xorq %rax, %rax
-    movq $1, %rsi
-    int $0x80
-
-    /* Test 3: read again → 0 (EOF) */
-    movq $10, %rax
-    movq %r13, %rdi
-    leaq test_buf(%rip), %rsi
-    movq $1, %rdx
-    int $0x80
-    cmpq $0, %rax
-    jne .st_fail_eof
-
-    /* Test 4: close(fd) */
-    movq $9, %rax
-    movq %r13, %rdi
-    int $0x80
-    cmpq $0, %rax
-    jne .st_fail_close
-
-    /* Test 5: open("nonexist.txt") → negative */
-    movq $8, %rax
-    leaq path_nonexist(%rip), %rdi
-    int $0x80
-    cmpq $0, %rax
-    jge .st_fail_badpath
-
-    /* Test 6: read(99, buf, 10) → negative (BAD_FD) */
-    movq $10, %rax
-    movq $99, %rdi
-    leaq test_buf(%rip), %rsi
-    movq $10, %rdx
-    int $0x80
-    cmpq $0, %rax
-    jge .st_fail_bfd_read
-
-    /* Test 7: close(99) → negative (BAD_FD) */
-    movq $9, %rax
-    movq $99, %rdi
-    int $0x80
-    cmpq $0, %rax
-    jge .st_fail_bfd_close
-
-    /* Test 8: open("hello.txt") again for ptr test */
-    movq $8, %rax
-    leaq path_hello(%rip), %rdi
-    int $0x80
-    cmpq $0, %rax
-    jl .st_fail_open2
-    movq %rax, %r13
-
-    /* Test 9: read(fd, 0x1, 10) → invalid pointer */
-    movq $10, %rax
-    movq %r13, %rdi
-    movq $1, %rsi
-    movq $10, %rdx
-    int $0x80
-    cmpq $0, %rax
-    jge .st_fail_badptr
-
-    /* Test 10: close(fd) cleanup */
-    movq $9, %rax
-    movq %r13, %rdi
-    int $0x80
-
-    /* All passed */
-    testq %r12, %r12
-    jnz .st_failed
-    leaq msg_syscall6_pass(%rip), %rdi
-    xorq %rax, %rax
-    movq $23, %rsi
-    int $0x80
-    jmp .st_done
-
-    /* Failure handlers */
-.st_fail_open:
-    movq $1, %r12
-    leaq msg_st_open_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $18, %rsi
-    int $0x80
-    jmp .st_done
-
-.st_fail_read:
-    movq $1, %r12
-    leaq msg_st_read_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $18, %rsi
-    int $0x80
-    jmp .st_done
-
-.st_fail_eof:
-    movq $1, %r12
-    leaq msg_st_eof_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $20, %rsi
-    int $0x80
-    /* Close the fd */
-    movq $9, %rax
-    movq %r13, %rdi
-    int $0x80
-    jmp .st_done
-
-.st_fail_close:
-    movq $1, %r12
-    leaq msg_st_close_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $19, %rsi
-    int $0x80
-    jmp .st_done
-
-.st_fail_badpath:
-    movq $1, %r12
-    leaq msg_st_badpath_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $25, %rsi
-    int $0x80
-    jmp .st_done
-
-.st_fail_bfd_read:
-    movq $1, %r12
-    leaq msg_st_bfd_read_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $23, %rsi
-    int $0x80
-    jmp .st_done
-
-.st_fail_bfd_close:
-    movq $1, %r12
-    leaq msg_st_bfd_close_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $24, %rsi
-    int $0x80
-    jmp .st_done
-
-.st_fail_open2:
-    movq $1, %r12
-    leaq msg_st_open2_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $20, %rsi
-    int $0x80
-    jmp .st_done
-
-.st_fail_badptr:
-    movq $1, %r12
-    leaq msg_st_badptr_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $24, %rsi
-    int $0x80
-    /* Close fd */
-    movq $9, %rax
-    movq %r13, %rdi
-    int $0x80
-    jmp .st_done
-
-.st_failed:
-    leaq msg_syscall6_fail(%rip), %rdi
-    xorq %rax, %rax
-    movq $23, %rsi
-    int $0x80
-
-.st_done:
-    leaq nl_str(%rip), %rdi
-    xorq %rax, %rax
-    movq $1, %rsi
-    int $0x80
-
 .shell_loop:
     leaq msg_prompt(%rip), %rdi
     xorq %rax, %rax
@@ -557,39 +353,4 @@ cmd_exit:
 cmd_sleep:
     .asciz "sleep "
 
-
-    /* ===== Phase 6 syscall test data ===== */
-msg_syscall6_start:
-    .asciz "\n[*] Syscall FS regression test\n"
-msg_syscall6_pass:
-    .asciz "[SYSCALL6] test passed\n"
-msg_syscall6_fail:
-    .asciz "[SYSCALL6] test FAILED\n"
-msg_st_read_ok:
-    .asciz "  [+] Read from file: "
-msg_st_open_fail:
-    .asciz "  [!] open failed\n"
-msg_st_read_fail:
-    .asciz "  [!] read failed\n"
-msg_st_eof_fail:
-    .asciz "  [!] EOF test fail\n"
-msg_st_close_fail:
-    .asciz "  [!] close failed\n"
-msg_st_badpath_fail:
-    .asciz "  [!] bad path test fail\n"
-msg_st_bfd_read_fail:
-    .asciz "  [!] bad FD read fail\n"
-msg_st_bfd_close_fail:
-    .asciz "  [!] bad FD close fail\n"
-msg_st_open2_fail:
-    .asciz "  [!] reopen failed\n"
-msg_st_badptr_fail:
-    .asciz "  [!] bad ptr test fail\n"
-path_hello:
-    .asciz "hello.txt"
-path_nonexist:
-    .asciz "nonexist.txt"
-test_buf:
-    .skip 256
-
-user_code_end:
+shell_code_end:

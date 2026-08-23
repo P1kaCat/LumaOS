@@ -12,6 +12,7 @@ void *kmalloc(uint64_t size);
 void kfree(void *ptr);
 
 /* Phase 3: per-process page tables */
+#define MAX_PROCS 4
 uint64_t create_user_pml4(int idx, uint64_t user_phys_addr);
 
 /* Phase 4: page allocator (4KB physical pages) */

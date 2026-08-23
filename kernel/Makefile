@@ -18,7 +18,7 @@ KERNEL_BIN := $(BUILD_DIR)/kernel.elf
 
 KERNEL_OBJS := $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o \
                $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o \
-               $(BUILD_DIR)/user.o $(BUILD_DIR)/user_code.o $(BUILD_DIR)/ata.o \
+               $(BUILD_DIR)/user.o $(BUILD_DIR)/init_code.o $(BUILD_DIR)/shell_code.o $(BUILD_DIR)/ata.o \
                $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o
 
 .PHONY: all clean
@@ -34,7 +34,7 @@ $(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h .
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
-$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h ../include/handoff.h
+$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
 
@@ -54,9 +54,13 @@ $(BUILD_DIR)/user.o: user.c user.h cpu.h sched.h mem.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c user.c -o $@
 
-$(BUILD_DIR)/user_code.o: user_code.S
+$(BUILD_DIR)/init_code.o: init_code.S
 	@mkdir -p $(BUILD_DIR)
-	$(CC) $(ASM_FLAGS) -c user_code.S -o $@
+	$(CC) $(ASM_FLAGS) -c init_code.S -o $@
+
+$(BUILD_DIR)/shell_code.o: shell_code.S
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(ASM_FLAGS) -c shell_code.S -o $@
 
 $(BUILD_DIR)/boot.o: boot.S
 	@mkdir -p $(BUILD_DIR)

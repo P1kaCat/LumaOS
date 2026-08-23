@@ -162,7 +162,8 @@ jobs:
             "[FAT32]" \
             "Phase 4+5 regression test passed" \
             "[VFS] test passed" \
-            "[SYSCALL6] test passed"
+            "[SYSCALL6] test passed" \
+            "[INIT5] test passed"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"

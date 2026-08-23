@@ -28,7 +28,6 @@ static uint64_t pml4[512] __attribute__((aligned(4096)));
 static uint64_t pdpt[512] __attribute__((aligned(4096)));
 static uint64_t pd[4][512] __attribute__((aligned(4096)));
 
-#define MAX_PROCS 4
 static uint64_t proc_pml4[MAX_PROCS][512] __attribute__((aligned(4096)));
 static uint64_t proc_pdpt[MAX_PROCS][512] __attribute__((aligned(4096)));
 static uint64_t proc_pd[MAX_PROCS][512] __attribute__((aligned(4096)));
@@ -57,7 +56,10 @@ uint64_t create_user_pml4(int idx, uint64_t user_phys_addr) {
         if (j == 5 || j == 8 || j == 9) {
             proc_pd[idx][j] = 0;
         } else if (j == 4) {
-            proc_pd[idx][j] = user_phys_addr | 0x87;
+            if (user_phys_addr)
+                proc_pd[idx][j] = user_phys_addr | 0x87;  /* 2MB code page */
+            else
+                proc_pd[idx][j] = 0;  /* no 2MB page — caller uses map_page */
         } else {
             uint64_t addr = (uint64_t)j * 0x200000ULL;
             proc_pd[idx][j] = addr | 0x83;

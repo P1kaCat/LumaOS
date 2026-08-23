@@ -3,5 +3,6 @@
 #define LUMAOS_USER_H
 
 void user_init(void);
+int spawn_shell(void);
 
 #endif

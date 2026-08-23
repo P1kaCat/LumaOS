@@ -104,6 +104,8 @@ void proc_terminate(int pid) {
             tasks[i].state = PROC_TERMINATED;
             if (tasks[i].cr3) {
                 free_user_pages(tasks[i].cr3,
+                    0x800000ULL, 0x801000ULL);   /* code page (4KB only, skips 2MB) */
+                free_user_pages(tasks[i].cr3,
                     USER_STACK_BASE, tasks[i].user_stack_top);
                 free_user_pages(tasks[i].cr3,
                     USER_HEAP_BASE, USER_HEAP_MAX);

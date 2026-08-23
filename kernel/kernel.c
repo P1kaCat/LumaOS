@@ -358,7 +358,7 @@ void kernel_main(struct lumaos_handoff *ho) {
     serial_puts("[+] Interrupts enabled (timer 50Hz + keyboard)\n");
     __asm__ volatile ("sti");
 
-    serial_puts("\n[*] Setting up user shell (Ring 3)...\n");
+    serial_puts("\n[*] Setting up user init (Ring 3)...\n");
 
     uint64_t pages_before = count_free_pages();
     user_init();
@@ -369,7 +369,7 @@ void kernel_main(struct lumaos_handoff *ho) {
     serial_puts(uitoa(pages_after_init, buf));
     serial_puts("\n");
 
-    serial_puts("[+] Shell running. Type in QEMU window.\n");
+    serial_puts("[+] Init running, will spawn shell...\n");
 
     volatile int cleanup_test_done = 0;
     for (;;) {

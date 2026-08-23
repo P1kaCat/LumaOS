@@ -7,6 +7,7 @@
 #include "sched.h"
 #include "mem.h"
 #include "vfs.h"
+#include "user.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -492,6 +493,17 @@ void syscall_handler(struct registers *regs) {
             for (int i = 0; i < n; i++)
                 ubuf[i] = kbuf[i];
             regs->rax = (uint64_t)n;
+            break;
+        }
+
+        case 11: { /* spawn(prog_id) — RDI = program ID (0 = shell) */
+            int prog_id = (int)(int64_t)regs->rdi;
+            if (prog_id != 0) {
+                regs->rax = (uint64_t)(int64_t)-1;
+                break;
+            }
+            int pid = spawn_shell();
+            regs->rax = (uint64_t)(int64_t)pid;
             break;
         }
 
