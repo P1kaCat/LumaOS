@@ -13,10 +13,11 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (10 markers):
+- [x] Boot marker verification (12 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
+  - `[PCI7] devices:`, `[ACPI7a2] tables parsed`
 - [x] Serial log artifact upload on failure
 
 Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers), `c15678e` (added [INIT5] marker), `8065462` (added [CAT6] marker + cat sendkey)
@@ -230,9 +231,28 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 ---
 
 ## Phase 7 — Drivers
-**Status: ⬜ Not started**
+**Status: 🔄 In Progress**
 
-- [ ] PCI
+### PCI Bus Enumeration — ✅ Done (Phase 7a.1)
+- [x] PCI config space access (0xCF8/0xCFC, read32/read16/read8)
+- [x] Bus 0 enumeration (32 devices × 8 functions, multifunction-aware)
+- [x] Vendor/device/class/subclass/prog_if/header_type/BARs/IRQ
+- [x] `pci_find_device()` and `pci_find_class()` for driver discovery
+- [x] `[PCI7] devices:` CI marker
+- Commit: `e592466`
+
+### ACPI Table Parsing — ✅ Done (Phase 7a.2)
+- [x] UEFI bootloader: find RSDP in EFI configuration tables (ACPI 2.0+ GUID)
+- [x] RSDP passed to kernel via handoff struct (`ho->rsdp`)
+- [x] RSDP validation (signature "RSD PTR ", checksum, revision check)
+- [x] XSDT parsing (signature validation, checksum, entry enumeration)
+- [x] MADT (APIC) parsing: LAPIC address, flags, IOAPIC entries
+- [x] FADT (FACP) parsing: SCI_INT, SMI_CMD, PM registers, DSDT pointer
+- [x] MCFG parsing (if available — ECAM base, bus range)
+- [x] `acpi_find_table()` API for future drivers
+- [x] `[ACPI7a2] tables parsed` CI marker
+
+### Next drivers — ⬜ Planned
 - [ ] USB
 - [ ] USB keyboard
 - [ ] Mouse

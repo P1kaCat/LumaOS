@@ -1,17 +1,21 @@
 /*
- * efi_main.c — Bootloader UEFI LumaOS (Phase 0A + 0B)
+ * efi_main.c — Bootloader UEFI LumaOS (Phase 0A + 0B + 7a.2)
  *
  * Phase 0A : afficher "LumaOS" à l'écran
  * Phase 0B : charger kernel.elf depuis le disque, récupérer le framebuffer
  *           et le memory map, exit boot services, puis sauter au kernel.
+ * Phase 7a.2 : chercher le RSDP ACPI 2.0+ dans les EFI configuration tables
+ *              et passer le pointeur au kernel via le handoff struct.
  *
  * Flow :
  *   1. Récupérer GOP (framebuffer)
  *   2. Ouvrir le filesystem, lire kernel.elf
  *   3. Parser ELF, charger les segments à 0x100000
  *   4. Récupérer le memory map
- *   5. ExitBootServices
- *   6. Appeler le kernel avec le handoff struct en argument
+ *   5. Chercher le RSDP ACPI 2.0+ dans les configuration tables
+ *   6. Construire le handoff struct (avec rsdp)
+ *   7. ExitBootServices
+ *   8. Appeler le kernel avec le handoff struct en argument
  *
  * L'ABI est Microsoft x64 : RCX = image_handle, RDX = system_table.
  */
@@ -46,6 +50,15 @@ static void efi_error(struct efi_system_table *st, const efi_char16_t *msg) {
     efi_print(st, msg);
     efi_print(st, L"\r\n");
     for (;;) {}
+}
+
+/* Comparer deux GUIDs (16 bytes) */
+static int guid_equal(const struct efi_guid *a, const struct efi_guid *b) {
+    unsigned char *pa = (unsigned char *)a;
+    unsigned char *pb = (unsigned char *)b;
+    for (int i = 0; i < 16; i++)
+        if (pa[i] != pb[i]) return 0;
+    return 1;
 }
 
 /* ===== Buffer statique pour le memory map ===== */
@@ -183,7 +196,30 @@ efi_status_t efi_main(efi_handle_t image_handle, struct efi_system_table *st) {
     if (s != EFI_SUCCESS)
         efi_error(st, L"GetMemoryMap failed");
 
-    /* --- 5. Construire le handoff struct --- */
+    /* --- 5. Chercher le RSDP ACPI 2.0+ dans les configuration tables --- */
+    efi_print(st, L"[*] Searching ACPI tables...\r\n");
+
+    uint64_t rsdp_addr = 0;
+    {
+        struct efi_configuration_table *ct =
+            (struct efi_configuration_table *)st->configuration_table;
+        unsigned long long n = st->number_of_table_entries;
+
+        for (unsigned long long i = 0; i < n; i++) {
+            if (guid_equal(&ct[i].vendor_guid,
+                           (struct efi_guid *)&EFI_ACPI_20_GUID)) {
+                rsdp_addr = (uint64_t)(uintptr_t)ct[i].vendor_table;
+                break;
+            }
+        }
+    }
+
+    if (rsdp_addr)
+        efi_print(st, L"[+] ACPI 2.0+ RSDP found\r\n");
+    else
+        efi_print(st, L"[!] ACPI 2.0+ RSDP not found\r\n");
+
+    /* --- 6. Construire le handoff struct --- */
     /* Alloué en EFI_LOADER_DATA — persiste après ExitBootServices */
     struct lumaos_handoff *ho = NULL;
     s = bs->allocate_pool(EFI_LOADER_DATA, sizeof(struct lumaos_handoff),
@@ -208,7 +244,10 @@ efi_status_t efi_main(efi_handle_t image_handle, struct efi_system_table *st) {
     ho->memory_map_desc_size  = desc_size;
     ho->memory_map_desc_version = desc_version;
 
-    /* --- 6. ExitBootServices (avec retry) --- */
+    /* ACPI RSDP pointer (Phase 7a.2) */
+    ho->rsdp = rsdp_addr;
+
+    /* --- 7. ExitBootServices (avec retry) --- */
     efi_print(st, L"[*] Exiting boot services...\r\n");
 
     s = bs->exit_boot_services(image_handle, map_key);
@@ -225,7 +264,7 @@ efi_status_t efi_main(efi_handle_t image_handle, struct efi_system_table *st) {
         }
     }
 
-    /* --- 7. Sauter au kernel --- */
+    /* --- 8. Sauter au kernel --- */
     /* Le kernel est en ELF (System V ABI). Le 1er argument va dans RDI. */
     /* On place le pointeur handoff dans RDI et on saute au point d'entrée. */
 

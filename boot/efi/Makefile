@@ -28,7 +28,7 @@ EFI_OBJ := $(BUILD_DIR)/boot/efi_main.o
 
 all: $(EFI_BIN)
 
-$(EFI_BIN): efi_main.c efi_types.h elf.h
+$(EFI_BIN): efi_main.c efi_types.h elf.h ../../include/handoff.h
 	@mkdir -p $(BUILD_DIR)/boot
 	$(CC) $(EFI_CFLAGS) -c efi_main.c -o $(EFI_OBJ)
 	$(CC) $(EFI_LDFLAGS) -o $@ $(EFI_OBJ)

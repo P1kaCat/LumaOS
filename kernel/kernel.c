@@ -8,6 +8,7 @@
 #include "fat32.h"
 #include "vfs.h"
 #include "pci.h"
+#include "acpi.h"
 
 static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
@@ -190,6 +191,9 @@ void kernel_main(struct lumaos_handoff *ho) {
     /* ---- Phase 7a.1: PCI bus enumeration ---- */
     serial_puts("\n[*] Enumerating PCI bus...\n");
     pci_init();
+
+    /* ---- Phase 7a.2: ACPI table parsing ---- */
+    acpi_init(ho->rsdp);
 
     /* ---- Phase 6: ATA/IDE disk driver ---- */
     serial_puts("\n[*] Initializing ATA/IDE driver...\n");

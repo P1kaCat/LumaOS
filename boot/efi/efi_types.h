@@ -59,6 +59,12 @@ static const struct efi_guid EFI_SFS_GUID = {
     { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b }
 };
 
+/* GUID ACPI 2.0+ : 8868E871-E4F1-11D3-BC22-0080C73C8881 */
+static const struct efi_guid EFI_ACPI_20_GUID = {
+    0x8868e871, 0xe4f1, 0x11d3,
+    { 0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81 }
+};
+
 /* ===== EFI_TABLE_HEADER (24 bytes) ===== */
 
 struct efi_table_header {
@@ -270,6 +276,13 @@ struct efi_system_table {
     unsigned long long      number_of_table_entries;    /* 104 */
     void                   *configuration_table;        /* 112 */
 };
+
+/* ===== Configuration Table (§4.6) ===== */
+
+struct efi_configuration_table {
+    struct efi_guid vendor_guid;
+    void           *vendor_table;
+};  /* 24 bytes */
 
 /* ===== Memory Descriptor (§7.4) ===== */
 

@@ -38,6 +38,9 @@ struct lumaos_handoff {
     uint32_t memory_map_desc_version;
 
     uint32_t reserved;
+
+    /* ACPI (Phase 7a.2) */
+    uint64_t rsdp;  /* Physical address of RSDP (ACPI 2.0+), 0 = not found */
 };
 
 #endif /* LUMAOS_HANDOFF_H */
