@@ -213,7 +213,7 @@ jobs:
             "[CAT6] test passed" \
             "[INIT5] test passed" \
             "[EXEC12] test passed" \
-            "[PCI7] devices:"
+            "[PCI7] devices:" \
             "[ACPI7a2] tables parsed"
           do
             if grep -qF "$marker" serial.log; then
