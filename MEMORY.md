@@ -1,231 +1,173 @@
 # MEMORY.md — LumaOS
 
-## Architecture actuelle
-
-OS monocœur x86_64, long mode, identity mapping.
-
-- **Bootloader** : UEFI (OVMF) → charge `kernel.elf` à `0x100000`, handoff struct (framebuffer + memory map)
-- **Kernel** : freestanding, linked à `0x100000`, pas de higher-half
-
-### Paging
-
-- 4-level page tables
-- Initial kernel mapping en 2MB pages
-- 4GB identity-mapped
-- Pages kernel : supervisor-only (`0x83`)
-- Région user : `0x800000`
-- User pages : U/S (`0x87`)
-- Page tables séparées par processus via CR3
-- Mapping dynamique de pages 4KB
-- `invlpg` après modification des mappings
-- Page fault utilisateur distinguant :
-  - page absente → lazy allocation
-  - violation de protection → terminaison du processus
-
-### Page allocator
-
-- Allocation physique par pages de 4KB
-- `alloc_page()`
-- `free_page()`
-- Réutilisation des pages libérées validée en QEMU
-- `count_free_pages()`
-
-### Heap kernel
-
-- Bump allocator `kmalloc()`
-- Pas encore de `free()`
-
-### Mémoire utilisateur
-
-- Heap user à `0x1000000`
-- `sbrk()` pour modifier le break utilisateur
-- Lazy allocation du heap via page fault
-- Stack user dans la région `0xA00000-0xC00000`
-- Croissance dynamique de la stack via page fault
-- Libération des pages user à la terminaison
-- Test de fuite mémoire présent
-- **Leak de 2 pages corrigé** : `free_user_pages()` libère stack data page + PT page
-- Test de mapping dynamique de Phase 4 nettoyé (PD + PT + data page freed après le test)
-- `free pages: before == final` validé en QEMU
-
-### Scheduler
-
-- Round-robin préemptif
-- PIT 50Hz
-- `system_ticks`
-- `MAX_TASKS=8`
-- États :
-  - `READY`
-  - `RUNNING`
-  - `SLEEPING`
-  - `TERMINATED`
-- `sleep(ticks)` avec réveil automatique
-- `yield()` pour forcer un changement de tâche
-- Context switch en assembly (`isr.S`)
-- `iretq` pour Ring 0 et Ring 3
-
-`struct task` contient notamment :
-- `rsp`
-- `pid`
-- `state`
-- `is_user`
-- `cr3`
-- `kernel_rsp`
-
-### Processus
-
-- PID unique pour les processus user
-- Création / terminaison
-- Plusieurs processus simultanés
-- CR3 propre à chaque processus
-- Page tables propres à chaque processus
-- Kernel stack propre à chaque processus
-- Isolation inter-processus validée
-- Page fault inter-processus vérifié
-- `proc_terminate()` distingue les processus user des kernel tasks afin d'éviter les collisions de PID
-
-### User mode
-
-- Ring 3 via `iretq`
-- CS=`0x1B`
-- SS=`0x23`
-- RSP user séparé
-- User code position-independent
-- Code copié à `0x800000`
-- Stack user à `0xA00000`
-- Shell interactif actuellement exécuté en Ring 3
+Ce document décrit l'architecture mémoire, le système de fichiers, les appels système et l'état des sous-systèmes matériels de LumaOS.
 
 ---
 
-## Syscalls
+## 1. Architecture Mémoire
 
-Interface actuelle via `int 0x80`, vector 128, DPL=3.
+LumaOS est un système d'exploitation 64-bit (x86_64) fonctionnant en *long mode* avec *identity mapping*.
 
-| ID | Syscall | Fonction |
-|---:|---|---|
-| `0` | `write` | Écrit vers la sortie série |
-| `1` | `exit` | Termine le processus |
-| `2` | `getpid` | Retourne le PID courant |
-| `3` | `sbrk` | Modifie le break du heap user |
-| `4` | `read` | Lit le buffer clavier, non bloquant |
-| `5` | `sleep` | Endort le processus pendant N ticks |
-| `6` | `yield` | Force un changement de tâche |
-| `7` | `getpages` | Retourne le nombre de pages physiques libres |
+### Boot & Kernel
+- **Bootloader** : UEFI (OVMF) écrit en C (`boot/efi/efi_main.c`).
+- **Kernel** : Freestanding ELF64 chargé à `0x100000` (1 Mo), sans higher-half mapping.
+- **Handoff Structure** (`handoff.h`) : Transmet au kernel le framebuffer graphique (adresse, résolution, pitch, format BGR/RGB), la table de mémoire UEFI et le pointeur vers la table ACPI RSDP.
 
-- Syscall inconnu → `-1`
-- `sleep` : 50 ticks ≈ 1 seconde
-- `read` : non bloquant, retourne `0` si aucune donnée disponible
-- Le userland utilise `yield()` pour éviter le busy loop lors du polling clavier
+### Pagination (Paging)
+- Tables de pages à 4 niveaux (PML4, PDPT, PD, PT).
+- **Identity mapping** initial : 4 Go mappés en pages de 2 Mo (`0x83` = Present | Writable | Huge).
+- **Pages Kernel** : Supervisor-only (`0x83` / `0x03`).
+- **Région User** : À partir de `0x800000` (8 Mo) avec flags U/S (`0x87` / `0x07` = Present | Writable | User).
+- **CR3 séparé** : Chaque processus possède son propre PML4 et son espace d'adressage virtuel isolé.
+- **Mapping dynamique 4 Ko** : Fonctions `map_page()` et `unmap_page()` avec allocation dynamique de tables de pages intermédiaires et invalidation TLB (`invlpg`).
+- **Gestion du Page Fault (`#PF`)** :
+  - Page non présente dans la région heap ou stack utilisateur $\rightarrow$ Allocation paresseuse (*lazy allocation*).
+  - Violation de privilège ou adresse hors limites $\rightarrow$ Terminaison du processus fautif sans crash kernel.
 
----
+### Allocateur Physique (Physical Page Allocator)
+- Allocation et désallocation par tranches physiques de 4 Ko (`PAGE_SIZE = 4096`).
+- `alloc_page()` : Alloue une page physique libre.
+- `free_page(p)` : Remet une page dans la liste chaînée des pages libres.
+- `count_free_pages()` : Retourne le nombre total de pages disponibles.
+- Zéro fuite mémoire vérifiée par régression (`free pages: before == final`).
 
-## Clavier
+### Heap Kernel
+- Allocateur bump linéaire minimaliste `kmalloc(size)`.
+- Initialisé à partir de la mémoire physique disponible après le kernel.
 
-- IRQ clavier activée
-- Scancode Set 1
-- Ring buffer de 256 octets
-- Conversion scancode → ASCII via **deux tables AZERTY FR** :
-  - `scancode_map[128]` : unshifted (lettres minuscules, & " ' ( - _ ) = ^ $ * , ; : !)
-  - `scancode_shift_map[128]` : shifted (chiffres 1-0, majuscules, + % ? . /)
-- Suivi de l'état Shift via scancodes 0x2A/0x36 (make) et 0xAA/0xB6 (break)
-- Caractères non-ASCII (é è ç à ù ²) ignorés en unshifted, digit/équivalent ASCII en Shift
-- Layout AZERTY natif, indépendant du layout Windows/QEMU
-- **Validé en QEMU** : help, pid, mem, sleep, exit fonctionnent avec clavier AZERTY
-
-### Important
-
-Le clavier physique de développement est **AZERTY**.
+### Mémoire Utilisateur (Userland Memory Layout)
+- **Code utilisateur** : Chargé à `0x800000` (Ring 3, DPL=3).
+- **Stack utilisateur** : Située entre `0xA00000` et `0xC00000`, grandissant dynamiquement vers le bas via page fault.
+- **Heap utilisateur** : Débute à `0x1000000`, manipulable via le syscall `sbrk`.
+- **Nettoyage automatique** : `free_user_pages()` désalloue les pages de code, de pile, de heap ainsi que les tables de pages (PT/PD) associées lors de la terminaison du processus.
 
 ---
 
-## Shell userland
+## 2. Processus et Ordonnanceur
 
-Programme actuel dans `user_code.S`, **validé en QEMU**.
-
-Bug historique corrigé : le syscall `write` (echo) clobber RAX, ce qui détruisait le caractère dans AL avant son stockage dans `cmd_buf`. Fix : store avant echo.
-
-Affichage au démarrage :
-
-```
----
-
-## Phase 5 — Bilan final
-
-**Statut : ✅ Terminé et validé en QEMU**
-
-### Syscalls (int 0x80, vector 128, DPL=3)
-
-| ID | Syscall | Description |
-|---:|---|---|
-| `0` | `write` | Écrit vers la sortie série |
-| `1` | `exit` | Termine le processus courant |
-| `2` | `getpid` | Retourne le PID courant |
-| `3` | `sbrk` | Modifie le break du heap user |
-| `4` | `read` | Lit le buffer clavier (non bloquant) |
-| `5` | `sleep` | Endort le processus N ticks (50 ticks ≈ 1s) |
-| `6` | `yield` | Force un changement de tâche |
-| `7` | `getpages` | Retourne le nombre de pages physiques libres |
-
-- Syscall inconnu → retourne `-1`
-- Tous les syscalls sont validés en QEMU
-
-### Clavier AZERTY FR
-
-- Deux tables de scancodes Set 1 : `scancode_map` (unshifted) et `scancode_shift_map` (shifted)
-- Shift géré via 0x2A/0x36 (make) et 0xAA/0xB6 (break)
-- Caractères non-ASCII (é è ç à ù ²) ignorés sans Shift, digit/équivalent avec Shift
-- Layout AZERTY natif, indépendant de Windows/QEMU
-
-### Shell
-
-- Shell Ring 3 interactif avec prompt `>`
-- Commandes : `help`, `pid`, `mem`, `sleep N`, `exit`
-- Echo caractère par caractère avec backspace
-- Bug RAX/AL clobber corrigé (store avant echo syscall)
-- Validé en QEMU avec clavier AZERTY physique
-
-### Nettoyage mémoire
-
-- `free_user_pages()` libère stack data page + PT page à la terminaison
-- Test de mapping dynamique Phase 4 nettoyé (PD + PT + data page freed)
-- `free pages: before == final` — zéro fuite validée en QEMU
-- Régression Phase 4+5 complète passée
-
-### Commits clés
-
-- `7cee4c2` — AZERTY FR avec Shift + cleanup du test de mapping dynamique
-- `d4a766c` — Suppression des debug [DBG] et serial_putc inutilisé
-- `16e55d4` — Documentation ROADMAP + MEMORY Phase 5
+- **Ordonnanceur préemptif Round-Robin** :
+  - Fréquence PIT : 50 Hz (`system_ticks` incrémenté tous les 20 ms).
+  - Tâches limitées à `MAX_TASKS = 8`.
+- **États d'une tâche** :
+  - `READY` : Prête à être exécutée.
+  - `RUNNING` : En cours d'exécution sur le processeur.
+  - `SLEEPING` : Endormie jusqu'à une échéance `wake_tick` (géré par `sleep()`).
+  - `TERMINATED` : Tâche terminée, en attente de recyclage / libération des ressources.
+- **Structure `task`** : Contient `rsp`, `pid`, `state`, `is_user`, `cr3`, `kernel_rsp`, `wake_tick`, etc.
+- **Commutation de contexte** : Sauvegarde et restauration des registres en assembleur (`isr.S`) avec retour via `iretq`.
+- **Modèle de processus** :
+  - `init` (PID 1) : Exécute les tests de non-régression puis charge le shell interactif via `spawn` (syscall 11).
+  - `shell` (PID 2) : Shell interactif Ring 3.
 
 ---
 
-## Phase 6 — Architecture prévue (non implémentée)
+## 3. Appels Système (Syscalls)
 
-### Stack filesystem prévu
+Invoqués via l'interruption logicielle `int 0x80` (vecteur 128, DPL=3).
+Les arguments sont passés dans les registres x86_64 standards (`RAX` = ID du syscall, `RDI`, `RSI`, `RDX`, `R10`, `R8`, `R9`).
 
-```
-Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
-```
+| ID | Syscall | Paramètres | Description |
+|---:|---|---|---|
+| `0` | `write` | `RDI`: ptr buffer, `RSI`: len | Écrit une chaîne vers la sortie série |
+| `1` | `exit` | `RDI`: exit code | Termine le processus courant et libère sa mémoire |
+| `2` | `getpid` | *aucun* | Retourne le PID du processus courant |
+| `3` | `sbrk` | `RDI`: incr | Ajuste le break du heap utilisateur |
+| `4` | `read` | `RDI`: ptr buffer, `RSI`: max_len | Lit depuis le buffer clavier (non bloquant) |
+| `5` | `sleep` | `RDI`: ticks | Endort le processus pour N ticks (50 ticks ≈ 1s) |
+| `6` | `yield` | *aucun* | Cède immédiatement le processeur à une autre tâche |
+| `7` | `getpages`| *aucun* | Retourne le nombre de pages physiques libres |
+| `8` | `open` | `RDI`: ptr path | Ouvre un fichier FAT32 $\rightarrow$ retourne un `fd` |
+| `9` | `close` | `RDI`: fd | Ferme un descripteur de fichier |
+| `10`| `read` (VFS) | `RDI`: fd, `RSI`: ptr buf, `RDX`: len | Lit N octets depuis un descripteur de fichier |
+| `11`| `spawn` | `RDI`: entry_point | Crée et démarre un nouveau processus utilisateur |
+| `12`| `exec` | `RDI`: ptr path | Charge et exécute un binaire ELF64 depuis le disque |
 
-### Nouveaux fichiers prévus
+*Note : Les pointeurs passés par le Ring 3 sont validés via `validate_user_ptr()` et `copy_str_from_user()` pour garantir qu'ils pointent vers des pages utilisateur valides.*
 
-- `kernel/ata.c` / `kernel/ata.h` — driver ATA/IDE PIO (LBA28, port I/O)
-- `kernel/vfs.c` / `kernel/vfs.h` — abstraction VFS minimale
-- `kernel/fat32.c` / `kernel/fat32.h` — parser FAT32 read-only
-- `kernel/fs_syscall.c` (ou extension de `cpu.c`) — syscalls open/close/read
+---
 
-### QEMU disk image
+## 4. Clavier et Entrées
 
-- QEMU actuellement boot via FAT virtuelle (`fat:rw:$(EFI_ROOT)`)
-- Phase 6 prévoit un disque dur séparé pour la partition FAT32
-- `-drive file=disk.img,format=raw,media=disk,index=1`
+- **Matériel** : Contrôleur clavier PS/2 (IRQ 1).
+- **Protocole** : Scancode Set 1.
+- **Ring Buffer** : Tampon circulaire de 256 octets dans le kernel.
+- **Disposition AZERTY FR native** :
+  - Table sans Shift (`scancode_map`) : minuscules, ponctuation de base.
+  - Table avec Shift (`scancode_shift_map`) : chiffres 1-0, majuscules, caractères complémentaires.
+  - Gestion des scancodes Make/Break pour Shift gauche (`0x2A` / `0xAA`) et droit (`0x36` / `0xB6`).
+  - Fonctionnement vérifié sur clavier physique AZERTY et via injection QEMU `sendkey`.
 
-### Syscalls prévus
+---
 
-| ID | Syscall | Description |
-|---:|---|---|
-| `8` | `open` | Ouvre un fichier par chemin → fd |
-| `9` | `close` | Ferme un fd |
-| `10` | `read` | Lit depuis un fd (générique, pas seulement clavier) |
+## 5. Stockage et Système de Fichiers (Phase 6)
 
-Le syscall `read` (ID 4) actuel reste pour le clavier. Le nouveau `read` aura un ID différent ou le read actuel sera généralisé avec un fd.
+### Pile de stockage
+$$\text{Userland} \longrightarrow \text{Syscalls (open/close/read/exec)} \longrightarrow \text{VFS} \longrightarrow \text{FAT32} \longrightarrow \text{Driver ATA/IDE PIO} \longrightarrow \text{Disque physique/virtuel}$$
+
+- **Driver ATA/IDE PIO** (`ata.c` / `ata.h`) :
+  - Mode PIO LBA28 sur ports I/O Primaires (`0x1F0-0x1F7`, `0x3F6`).
+  - Détection du nombre de secteurs via la commande `IDENTIFY` (`0xEC`).
+  - Lecture secteur par secteur (`ata_read_sector`).
+- **Système de fichiers FAT32** (`fat32.c` / `fat32.h`) :
+  - Parsing complet du BPB (Bios Parameter Block) et de l'EBPB.
+  - Gestion des clusters, chaînes FAT (FAT1/FAT2) et répertoires au format 8.3.
+  - Support des fichiers multi-clusters.
+  - Parcours du répertoire racine (`fat32_list_root`) et recherche de fichiers (`fat32_lookup`).
+- **Couche VFS** (`vfs.c` / `vfs.h`) :
+  - Table globale de 8 descripteurs de fichiers (`MAX_FDS = 8`).
+  - Maintien de la position courante (`offset`), de la taille et du cluster en cours de lecture.
+  - Gestion de la fin de fichier (`EOF`) et validation des accès.
+- **Chargeur de binaires ELF64** (`user.c`, `elf.h`) :
+  - Validation de l'en-tête ELF (Magic, 64-bit, Little Endian, x86_64, `ET_EXEC`).
+  - Parsing des `Program Headers` (`PT_LOAD`).
+  - Allocation et mapping de pages virtuelles aux adresses `p_vaddr`.
+  - Copie des segments de code/données et mise à zéro de la section BSS.
+  - Démarrage de l'exécution au point d'entrée `e_entry`.
+
+---
+
+## 6. Architecture Matérielle & Drivers (Phase 7)
+
+### Énumération du Bus PCI (Phase 7a.1)
+- Accès au *Configuration Space* PCI via ports I/O `0xCF8` (Address) et `0xCFC` (Data).
+- Scan complet du Bus 0 (32 slots $\times$ 8 fonctions).
+- Lecture des identifiants Vendor/Device, Classes, Subclasses, Prog IF, BARs et Header Type.
+- Fonctions de recherche `pci_find_device()` et `pci_find_class()`.
+
+### Parsing ACPI (Phase 7a.2)
+- Récupération du pointeur RSDP via la structure de handoff UEFI.
+- Validation du checksum RSDP (signature `"RSD PTR "`).
+- Découverte et validation de la table XSDT (64-bit).
+- Parsing des tables :
+  - **MADT (Multiple APIC Description Table)** : Local APIC base, I/O APIC entries, Interrupt Source Overrides.
+  - **FADT (Fixed ACPI Description Table)** : Ports PM, registres SMI/SCI.
+  - **MCFG** : Base MMIO PCIe ECAM.
+
+### Gestionnaires d'Interruptions LAPIC & I/O APIC (Phase 7a.3)
+- Désactivation complète du PIC 8259 hérité (masquage de toutes les IRQ).
+- Initialisation et activation du **Local APIC (LAPIC)** : Registre SVR, TPR = 0, envoi d'EOI APIC pour acquitter les interruptions.
+- Initialisation de l'**I/O APIC** :
+  - Configuration de la table de redirection (24 entrées).
+  - Prise en compte des *Interrupt Source Overrides* ACPI (ex: IRQ0 Timer routé vers GSI 2).
+  - Routage des ISA IRQs 0-15 vers les vecteurs 32-47.
+
+### Routage des Interruptions PCI (Phase 7a.4)
+- Lecture des registres PIRQ du chipset PIIX3 (`0x60-0x63`).
+- Association des broches INT A/B/C/D vers les GSIs 16-19.
+- Configuration des vecteurs IDT 48-51 (Level-triggered, Active-low).
+
+### Contrôleur USB xHCI (Phase 7b)
+- **Découverte (7b.1)** : Détection de la classe PCI `0x0C / 0x03 / 0x30`, lecture et mapping MMIO du BAR0 64-bit, lecture des Capability Registers (`CAPLENGTH`, `HCIVERSION`, `HCSPARAMS1-3`, `HCCPARAMS1`, `DBOFF`, `RTSOFF`).
+- **Reset & Anneaux (7b.2)** :
+  - Arrêt et Reset du contrôleur (`USBCMD.HCRST`).
+  - Allocation et programmation du tableau DCBAA (`DCBAAP`).
+  - Allocation du **Command Ring** (256 TRBs terminés par un Link TRB avec toggle cycle).
+  - Allocation de l'**Event Ring** (256 TRBs) et de la table **ERST** (Event Ring Segment Table).
+  - Configuration de l'Interrupter 0 (`IMAN`, `ERSTSZ`, `ERSTBA`, `ERDP`).
+  - Démarrage du contrôleur (`USBCMD.RUN = 1`, `USBSTS.HCH == 0`).
+- **Commandes & Ports (7b.3)** :
+  - Moteur de soumission de commandes (`xhci_send_command`) avec sonnerie Doorbell 0.
+  - Réception et acquittement des événements de complétion sur l'Event Ring via `ERDP`.
+  - Commandes `NO_OP` et `ENABLE_SLOT`.
+  - Détection de présence matérielle (`PORTSC.CCS`), réinitialisation de port (`PORTSC.PR`), lecture de la vitesse de négociation (USB Full/Low/High/SuperSpeed).
+

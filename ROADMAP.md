@@ -13,11 +13,12 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (15 markers):
+- [x] Boot marker verification (17 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
-  - `[PCI7] devices:`, `[ACPI7a2] tables parsed`, `[APIC7a3]`, `[PCI7a4]`, `[XHCI7b1]`
+  - `[PCI7] devices:`, `[ACPI7a2] tables parsed`, `[APIC7a3]`, `[PCI7a4]`
+  - `[XHCI7b1]`, `[XHCI7b2] reset + rings ready`, `[XHCI7b3] port reset + slot enabled`
 - [x] Serial log artifact upload on failure
 
 Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers), `c15678e` (added [INIT5] marker), `8065462` (added [CAT6] marker + cat sendkey)
@@ -283,11 +284,32 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Read operational registers (USBCMD, USBSTS, PAGESIZE)
 - [x] `[XHCI7b1] controller discovered` CI marker
 
+### xHCI Controller Reset + Rings — ✅ Done (Phase 7b.2)
+- [x] Controller halt and reset (`USBCMD.HCRST`)
+- [x] DCBAA allocation and programming (`DCBAAP`)
+- [x] Command ring allocation (256 TRBs + Link TRB with TC)
+- [x] Event ring + ERST allocation (1 segment, 256 TRBs)
+- [x] Interrupter 0 setup (`IMAN`, `IMOD`, `ERSTSZ`, `ERSTBA`, `ERDP`)
+- [x] Controller start (`USBCMD.RS = 1`, verify HCH cleared)
+- [x] `[XHCI7b2] reset + rings ready` CI marker
+
+### xHCI Command Engine & Port Probing — ✅ Done (Phase 7b.3)
+- [x] Command Ring submission engine (`xhci_send_command`) with cycle bit tracking and Link TRB wrap
+- [x] Doorbell 0 ringing (`DBOFF + 0`)
+- [x] Event Ring polling and acknowledgment via `ERDP` (with EHB)
+- [x] `NO_OP` command execution test (TRB Type 23)
+- [x] `ENABLE_SLOT` command execution (TRB Type 9) $\rightarrow$ allocates slot ID
+- [x] Port status probing (`PORTSC` reading, power on `PORTSC.PP`)
+- [x] USB connection detection (`PORTSC.CCS`) & speed negotiation detection (Full/Low/High/SuperSpeed)
+- [x] Port Reset assertion (`PORTSC.PR`) and verification of port enablement (`PORTSC.PED`)
+- [x] `[XHCI7b3] port reset + slot enabled` CI marker
+
 ### Next drivers — ⬜ Planned
-- [ ] xHCI controller reset + ring buffers
-- [ ] xHCI device enumeration
-- [ ] USB HID keyboard
-- [ ] USB HID mouse
+- [ ] xHCI device context setup (Input Context, Device Context, Slot/EP0 Contexts)
+- [ ] Address Device command & Endpoint 0 Transfer Ring setup
+- [ ] USB Device Descriptor reading (GET_DESCRIPTOR)
+- [ ] USB HID keyboard driver
+- [ ] USB HID mouse driver
 - [ ] NVMe / SATA storage
 - [ ] Audio
 - [ ] Networking

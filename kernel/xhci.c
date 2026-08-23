@@ -8,12 +8,17 @@
 #include "mem.h"
 
 static uint64_t g_xhci_mmio;
+static uint64_t g_xhci_op_base;
+static uint64_t g_xhci_rt_base;
+static uint32_t g_xhci_dboff;
 static uint64_t g_xhci_dcbaa;
 static uint64_t g_xhci_cmd_ring;
 static uint64_t g_xhci_event_ring;
 static uint64_t g_xhci_erst;
 static uint32_t g_xhci_cmd_cycle = 1;
 static uint32_t g_xhci_event_cycle = 1;
+static uint32_t g_xhci_cmd_enqueue_idx = 0;
+static uint32_t g_xhci_event_dequeue_idx = 0;
 static uint32_t g_xhci_max_slots;
 static uint32_t g_xhci_max_ports;
 static uint32_t g_xhci_ctx_size;
@@ -252,8 +257,151 @@ static int xhci_setup_rings(uint64_t mmio_base, uint64_t op_base,
         return -4;
     }
 
+    g_xhci_cmd_enqueue_idx = 0;
+    g_xhci_event_dequeue_idx = 0;
+
     serial_puts("  [+] xHCI controller running, command/event rings ready\n");
     return 0;
+}
+
+int xhci_send_command(struct xhci_trb *cmd, struct xhci_trb *event_out) {
+    if (!g_xhci_cmd_ring || !g_xhci_event_ring || !g_xhci_mmio) return -1;
+
+    struct xhci_trb *cmd_ring = (struct xhci_trb *)(unsigned long)g_xhci_cmd_ring;
+    struct xhci_trb *entry = &cmd_ring[g_xhci_cmd_enqueue_idx];
+
+    entry->parameter_lo = cmd->parameter_lo;
+    entry->parameter_hi = cmd->parameter_hi;
+    entry->status = cmd->status;
+    entry->control = (cmd->control & ~XHCI_TRB_CYCLE) | (g_xhci_cmd_cycle & XHCI_TRB_CYCLE);
+
+    g_xhci_cmd_enqueue_idx++;
+    if (g_xhci_cmd_enqueue_idx == 255) {
+        cmd_ring[255].control = (XHCI_TRB_TYPE_LINK << XHCI_TRB_TYPE_SHIFT) |
+                                XHCI_TRB_TC | (g_xhci_cmd_cycle & XHCI_TRB_CYCLE);
+        g_xhci_cmd_cycle ^= 1;
+        g_xhci_cmd_enqueue_idx = 0;
+    }
+
+    /* Ring Doorbell 0 */
+    xhci_write32(g_xhci_mmio, g_xhci_dboff, 0);
+
+    /* Poll Event Ring for Command Completion Event */
+    struct xhci_trb *event_ring = (struct xhci_trb *)(unsigned long)g_xhci_event_ring;
+    uint64_t intr0 = g_xhci_rt_base + XHCI_RT_INTR_BASE;
+
+    for (uint32_t attempt = 0; attempt < 10000000; attempt++) {
+        struct xhci_trb *ev = &event_ring[g_xhci_event_dequeue_idx];
+        if ((ev->control & XHCI_TRB_CYCLE) == (g_xhci_event_cycle & XHCI_TRB_CYCLE)) {
+            uint32_t trb_type = (ev->control & XHCI_TRB_TYPE_MASK) >> XHCI_TRB_TYPE_SHIFT;
+            struct xhci_trb curr_ev = *ev;
+
+            g_xhci_event_dequeue_idx++;
+            if (g_xhci_event_dequeue_idx == 256) {
+                g_xhci_event_dequeue_idx = 0;
+                g_xhci_event_cycle ^= 1;
+            }
+
+            uint64_t erdp_phys = g_xhci_event_ring + (uint64_t)g_xhci_event_dequeue_idx * sizeof(struct xhci_trb);
+            xhci_write64(intr0, XHCI_ERDP_LOW, erdp_phys | XHCI_ERDP_EHB);
+
+            if (trb_type == XHCI_TRB_TYPE_CMD_COMPLETION) {
+                if (event_out) *event_out = curr_ev;
+                uint32_t comp_code = (curr_ev.status >> 24) & 0xFF;
+                return (int)comp_code;
+            }
+        }
+    }
+    return -1;
+}
+
+int xhci_enable_slot(uint32_t *slot_id_out) {
+    struct xhci_trb cmd = {0};
+    cmd.control = (XHCI_TRB_TYPE_ENABLE_SLOT << XHCI_TRB_TYPE_SHIFT);
+
+    struct xhci_trb ev = {0};
+    int code = xhci_send_command(&cmd, &ev);
+    if (code == XHCI_COMP_SUCCESS) {
+        uint32_t slot_id = (ev.control >> 24) & 0xFF;
+        if (slot_id_out) *slot_id_out = slot_id;
+        return 0;
+    }
+    return -1;
+}
+
+static const char *xhci_speed_name(uint32_t speed) {
+    switch (speed) {
+        case XHCI_SPEED_FULL: return "Full-Speed (12 Mbps)";
+        case XHCI_SPEED_LOW:  return "Low-Speed (1.5 Mbps)";
+        case XHCI_SPEED_HIGH: return "High-Speed (480 Mbps)";
+        case XHCI_SPEED_SUPER: return "SuperSpeed (5 Gbps)";
+        case XHCI_SPEED_SUPER_PLUS: return "SuperSpeedPlus (10 Gbps)";
+        default: return "Unknown speed";
+    }
+}
+
+void xhci_probe_ports(void) {
+    char buf[32];
+    serial_puts("  [*] Probing xHCI ports...\n");
+
+    for (uint32_t port = 1; port <= g_xhci_max_ports; port++) {
+        uint32_t port_off = XHCI_PORT_BASE + (port - 1) * XHCI_PORT_STRIDE;
+        uint32_t portsc = xhci_read32(g_xhci_op_base, port_off + XHCI_PORTSC);
+
+        /* Ensure port is powered */
+        if (!(portsc & XHCI_PORTSC_PP)) {
+            xhci_write32(g_xhci_op_base, port_off + XHCI_PORTSC,
+                         (portsc & ~XHCI_PORTSC_RW1C_MASK) | XHCI_PORTSC_PP);
+            for (volatile int d = 0; d < 10000; d++);
+            portsc = xhci_read32(g_xhci_op_base, port_off + XHCI_PORTSC);
+        }
+
+        if (portsc & XHCI_PORTSC_CCS) {
+            uint32_t speed = (portsc & XHCI_PORTSC_SPEED_MASK) >> XHCI_PORTSC_SPEED_SHIFT;
+            serial_puts("    [+] Port ");
+            serial_puts(uitoa_local(port, buf));
+            serial_puts(": Device attached (initial speed: ");
+            serial_puts(xhci_speed_name(speed));
+            serial_puts(")\n");
+
+            /* Issue Port Reset */
+            serial_puts("        Resetting port ");
+            serial_puts(uitoa_local(port, buf));
+            serial_puts("...\n");
+
+            xhci_write32(g_xhci_op_base, port_off + XHCI_PORTSC,
+                         (portsc & ~XHCI_PORTSC_RW1C_MASK) | XHCI_PORTSC_PR);
+
+            /* Wait for reset to complete (PR bit clears) */
+            for (uint32_t i = 0; i < 1000000; i++) {
+                portsc = xhci_read32(g_xhci_op_base, port_off + XHCI_PORTSC);
+                if (!(portsc & XHCI_PORTSC_PR))
+                    break;
+            }
+
+            /* Clear RW1C change bits */
+            uint32_t changes = portsc & XHCI_PORTSC_RW1C_MASK;
+            if (changes) {
+                xhci_write32(g_xhci_op_base, port_off + XHCI_PORTSC,
+                             (portsc & ~XHCI_PORTSC_RW1C_MASK) | changes);
+            }
+
+            portsc = xhci_read32(g_xhci_op_base, port_off + XHCI_PORTSC);
+            speed = (portsc & XHCI_PORTSC_SPEED_MASK) >> XHCI_PORTSC_SPEED_SHIFT;
+
+            if (portsc & XHCI_PORTSC_PED) {
+                serial_puts("        [+] Port ");
+                serial_puts(uitoa_local(port, buf));
+                serial_puts(" enabled: ");
+                serial_puts(xhci_speed_name(speed));
+                serial_puts("\n");
+            } else {
+                serial_puts("        [!] Port ");
+                serial_puts(uitoa_local(port, buf));
+                serial_puts(" reset finished but not enabled\n");
+            }
+        }
+    }
 }
 
 void xhci_init(void) {
@@ -430,6 +578,11 @@ void xhci_init(void) {
     }
     serial_puts("  [+] xHCI controller reset complete\n");
 
+    g_xhci_mmio = mmio_base;
+    g_xhci_op_base = op_base;
+    g_xhci_rt_base = rt_base;
+    g_xhci_dboff = dboff;
+
     if (xhci_setup_rings(mmio_base, op_base, rt_base, ac64) != 0) {
         serial_puts("  [!] xHCI ring initialization failed\n");
         return;
@@ -442,4 +595,33 @@ void xhci_init(void) {
     serial_puts(" bytes\n");
 
     serial_puts("[XHCI7b2] reset + rings ready\n");
+
+    /* Phase 7b.3: Probing ports + Port Reset */
+    xhci_probe_ports();
+
+    /* Phase 7b.3: Testing NO_OP Command */
+    struct xhci_trb noop_cmd = {0};
+    noop_cmd.control = (XHCI_TRB_TYPE_CMD_NOOP << XHCI_TRB_TYPE_SHIFT);
+    struct xhci_trb noop_ev = {0};
+    int noop_res = xhci_send_command(&noop_cmd, &noop_ev);
+    if (noop_res == XHCI_COMP_SUCCESS) {
+        serial_puts("  [+] xHCI command ring test (NO_OP): SUCCESS\n");
+    } else {
+        serial_puts("  [!] xHCI command ring test (NO_OP) failed: code=");
+        serial_puts(uitoa_local((uint64_t)noop_res, buf));
+        serial_puts("\n");
+    }
+
+    /* Phase 7b.3: Testing ENABLE_SLOT Command */
+    uint32_t slot_id = 0;
+    int slot_res = xhci_enable_slot(&slot_id);
+    if (slot_res == 0) {
+        serial_puts("  [+] xHCI slot enabled: slot_id=");
+        serial_puts(uitoa_local((uint64_t)slot_id, buf));
+        serial_puts("\n");
+    } else {
+        serial_puts("  [!] xHCI enable slot failed\n");
+    }
+
+    serial_puts("[XHCI7b3] port reset + slot enabled\n");
 }

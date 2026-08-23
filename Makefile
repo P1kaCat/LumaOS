@@ -82,6 +82,8 @@ run: build
 	  -drive if=pflash,format=raw,unit=1,file=$(BUILD_DIR)/ovmf_vars.fd \
 	  -drive file=fat:rw:$(EFI_ROOT),format=raw,media=disk \
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
+	  -device qemu-xhci,id=xhci \
+	  -device usb-kbd,bus=xhci.0 \
 	  -serial stdio
 
 # debug : build + QEMU freeze au boot (gdbstub, port 1234)
@@ -93,6 +95,8 @@ debug: build
 	  -drive if=pflash,format=raw,unit=1,file=$(BUILD_DIR)/ovmf_vars.fd \
 	  -drive file=fat:rw:$(EFI_ROOT),format=raw,media=disk \
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
+	  -device qemu-xhci,id=xhci \
+	  -device usb-kbd,bus=xhci.0 \
 	  -serial stdio \
 	  -s -S
 
