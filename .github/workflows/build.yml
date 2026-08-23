@@ -99,6 +99,7 @@ jobs:
             -drive if=pflash,format=raw,unit=1,file=build/ovmf_vars.fd \
             -drive file=fat:rw:build/efi_root,format=raw,media=disk \
             -drive file=build/disk.img,format=raw,if=ide,index=1 \
+            -device qemu-xhci \
             -serial file:serial.log &
           QEMU_PID=$!
 
@@ -216,7 +217,8 @@ jobs:
             "[PCI7] devices:" \
             "[ACPI7a2] tables parsed" \
             "[APIC7a3] LAPIC + IOAPIC enabled" \
-            "[PCI7a4] IRQ routing OK"
+            "[PCI7a4] IRQ routing OK" \
+            "[XHCI7b1] controller discovered"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"

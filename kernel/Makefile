@@ -19,7 +19,7 @@ KERNEL_BIN := $(BUILD_DIR)/kernel.elf
 KERNEL_OBJS := $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o \
                $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o \
                $(BUILD_DIR)/user.o $(BUILD_DIR)/init_code.o $(BUILD_DIR)/shell_code.o $(BUILD_DIR)/ata.o \
-               $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o $(BUILD_DIR)/pci.o $(BUILD_DIR)/acpi.o $(BUILD_DIR)/apic.o
+               $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o $(BUILD_DIR)/pci.o $(BUILD_DIR)/acpi.o $(BUILD_DIR)/apic.o $(BUILD_DIR)/xhci.o
 
 .PHONY: all clean
 
@@ -93,3 +93,7 @@ $(BUILD_DIR)/apic.o: apic.c apic.h acpi.h cpu.h
 clean:
 	@rm -rf $(BUILD_DIR)
 	@echo "Kernel build cleaned"
+
+$(BUILD_DIR)/xhci.o: xhci.c xhci.h pci.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c xhci.c -o $@

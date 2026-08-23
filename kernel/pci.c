@@ -80,6 +80,42 @@ uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
     return (uint8_t)((val >> ((offset & 3) * 8)) & 0xFF);
 }
 
+/* ===== Config space write ===== */
+
+void pci_config_write16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint16_t val) {
+    uint32_t addr = 0x80000000u
+                  | ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func << 8)
+                  | ((uint32_t)offset & 0xFCu);
+    outl(PCI_CONFIG_ADDR, addr);
+    /* For 16-bit write, we need to read-modify-write the 32-bit dword */
+    uint32_t cur = inl(PCI_CONFIG_DATA);
+    uint32_t shift = (offset & 2) * 8;
+    uint32_t mask = 0xFFFFu << shift;
+    uint32_t newval = (cur & ~mask) | ((uint32_t)val << shift);
+    outl(PCI_CONFIG_ADDR, addr);
+    outl(PCI_CONFIG_DATA, newval);
+}
+
+void pci_config_write32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint32_t val) {
+    uint32_t addr = 0x80000000u
+                  | ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func << 8)
+                  | ((uint32_t)offset & 0xFCu);
+    outl(PCI_CONFIG_ADDR, addr);
+    outl(PCI_CONFIG_DATA, val);
+}
+
+void pci_enable_device(struct pci_device *dev) {
+    /* Read current command register */
+    uint16_t cmd = pci_config_read16(dev->bus, dev->device, dev->func, PCI_OFFSET_COMMAND);
+    /* Enable Memory Space + Bus Master + I/O Space */
+    cmd |= (PCI_CMD_MEMORY_SPACE | PCI_CMD_BUS_MASTER | PCI_CMD_IO_SPACE);
+    pci_config_write16(dev->bus, dev->device, dev->func, PCI_OFFSET_COMMAND, cmd);
+}
+
 /* ===== Class name lookup ===== */
 
 static const char *pci_class_name(uint8_t base_class) {

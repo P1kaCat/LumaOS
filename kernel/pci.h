@@ -37,6 +37,14 @@
 #define PCI_HEADER_CARDBUS   0x02
 #define PCI_HEADER_MULTIFUNC 0x80  /* bit 7 = multifunction */
 
+/* PCI Command register bits (offset 0x04, 16-bit) */
+#define PCI_CMD_IO_SPACE       0x0001
+#define PCI_CMD_MEMORY_SPACE    0x0002
+#define PCI_CMD_BUS_MASTER      0x0004
+
+/* PCI Status register (offset 0x06, 16-bit) */
+#define PCI_OFFSET_COMMAND      0x04
+
 /* ===== Invalid vendor ID (no device at this BDF) ===== */
 #define PCI_VENDOR_INVALID   0xFFFF
 
@@ -67,6 +75,14 @@ uint16_t pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offse
 
 /* Read 8 bits from PCI config space at the given BDF offset. */
 uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset);
+
+/* Write 16/32 bits to PCI config space at the given BDF offset. */
+void pci_config_write16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint16_t val);
+void pci_config_write32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint32_t val);
+
+/* Enable a PCI device: set Command register (Memory Space + Bus Master + I/O Space).
+ * Also clears any PCI error status bits in the Status register. */
+void pci_enable_device(struct pci_device *dev);
 
 /* Initialize PCI: enumerate bus 0 and populate the device table. */
 void pci_init(void);

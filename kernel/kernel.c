@@ -10,6 +10,7 @@
 #include "pci.h"
 #include "acpi.h"
 #include "apic.h"
+#include "xhci.h"
 
 static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
@@ -201,6 +202,9 @@ void kernel_main(struct lumaos_handoff *ho) {
 
     /* ---- Phase 7a.4: PCI Interrupt Routing ---- */
     pci_irq_init();
+
+    /* ---- Phase 7b.1: xHCI USB Controller Discovery ---- */
+    xhci_init();
     /* ---- Phase 6: ATA/IDE disk driver ---- */
     serial_puts("\n[*] Initializing ATA/IDE driver...\n");
     if (ata_init() != 0) {

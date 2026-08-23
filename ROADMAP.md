@@ -13,11 +13,11 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (14 markers):
+- [x] Boot marker verification (15 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
-  - `[PCI7] devices:`, `[ACPI7a2] tables parsed`
+  - `[PCI7] devices:`, `[ACPI7a2] tables parsed`, `[APIC7a3]`, `[PCI7a4]`, `[XHCI7b1]`
 - [x] Serial log artifact upload on failure
 
 Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers), `c15678e` (added [INIT5] marker), `8065462` (added [CAT6] marker + cat sendkey)
@@ -272,10 +272,22 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Print full routing table (slot, pin, PIRQ, GSI, vector, ISA IRQ)
 - [x] `[PCI7a4] IRQ routing OK` CI marker
 
+### xHCI USB Controller Discovery — ✅ Done (Phase 7b.1)
+- [x] PCI config space write support (pci_config_write16/32)
+- [x] PCI device enablement (Memory Space + Bus Master + I/O Space)
+- [x] Add QEMU xHCI device (`-device qemu-xhci`) to CI
+- [x] Discover xHCI controller via PCI class 0C/03/30
+- [x] Read BAR0 MMIO base address
+- [x] Read xHCI capability registers (CAPLENGTH, HCIVERSION, HCSPARAMS1-3, HCCPARAMS1)
+- [x] Read doorbell + runtime register offsets (DBOFF, RTSOFF)
+- [x] Read operational registers (USBCMD, USBSTS, PAGESIZE)
+- [x] `[XHCI7b1] controller discovered` CI marker
+
 ### Next drivers — ⬜ Planned
-- [ ] USB
-- [ ] USB keyboard
-- [ ] Mouse
+- [ ] xHCI controller reset + ring buffers
+- [ ] xHCI device enumeration
+- [ ] USB HID keyboard
+- [ ] USB HID mouse
 - [ ] NVMe / SATA storage
 - [ ] Audio
 - [ ] Networking
