@@ -13,7 +13,7 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (21 markers):
+- [x] Boot marker verification (22 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
@@ -24,6 +24,7 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
   - `[NVME7d] controller initialized + admin queue ready`
   - `[E1000-8] ethernet controller initialized + MAC read`
   - `[HDA7e] audio controller initialized + CORB/RIRB ready`
+  - `[NET8] network stack (ARP + IPv4 + ICMP + UDP) initialized`
 - [x] Serial log artifact upload on failure
 
 Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers), `c15678e` (added [INIT5] marker), `8065462` (added [CAT6] marker + cat sendkey)
@@ -357,9 +358,20 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Ethernet packet reception engine (`e1000_recv_packet`)
 - [x] Test Ethernet frame transmission
 - [x] `[E1000-8] ethernet controller initialized + MAC read` CI marker
-- [ ] IP / ARP network stack
-- [ ] UDP / TCP transport layer
-- [ ] DNS resolution
+
+### Network Stack (ARP + IPv4 + ICMP + UDP) — ✅ Done (Phase 8)
+- [x] ARP: Cache ARP dynamique (ARP_CACHE_SIZE = 16 entrées)
+- [x] ARP: Envoi automatique de requêtes *who-has* et réponse *is-at*
+- [x] Ethernet II: dispatching ARP / IPv4 par EtherType
+- [x] IPv4: Parsing et validation des en-têtes, calcul de checksum RFC 791
+- [x] IPv4: Routage local (même sous-réseau) et passerelle par défaut QEMU (`10.0.2.2`)
+- [x] ICMP: Répondeur automatique aux Echo Request (Ping entrant)
+- [x] ICMP: Client Ping sortant (`icmp_ping()`) avec validation de l'écho
+- [x] UDP: Encapsulation / décapsulation des datagrammes UDP
+- [x] Test de connectivité automatique au démarrage (Ping `10.0.2.2`, UDP `10.0.2.3:53`)
+- [x] `[NET8] network stack (ARP + IPv4 + ICMP + UDP) initialized` CI marker
+- [ ] TCP: Three-way handshake, gestion des flux, fenêtrage
+- [ ] DNS: Résolution de noms via UDP (Query A, AAAA)
 - [ ] Userland networking API / sockets
 
 ---

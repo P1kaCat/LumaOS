@@ -20,7 +20,7 @@ KERNEL_OBJS := $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o \
                $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o \
                $(BUILD_DIR)/user.o $(BUILD_DIR)/init_code.o $(BUILD_DIR)/shell_code.o $(BUILD_DIR)/ata.o \
                $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o $(BUILD_DIR)/pci.o $(BUILD_DIR)/acpi.o $(BUILD_DIR)/apic.o \
-               $(BUILD_DIR)/xhci.o $(BUILD_DIR)/ahci.o $(BUILD_DIR)/nvme.o $(BUILD_DIR)/e1000.o $(BUILD_DIR)/audio.o
+               $(BUILD_DIR)/xhci.o $(BUILD_DIR)/ahci.o $(BUILD_DIR)/nvme.o $(BUILD_DIR)/e1000.o $(BUILD_DIR)/net.o $(BUILD_DIR)/audio.o
 
 .PHONY: all clean
 
@@ -110,6 +110,10 @@ $(BUILD_DIR)/nvme.o: nvme.c nvme.h pci.h cpu.h mem.h
 $(BUILD_DIR)/e1000.o: e1000.c net.h pci.h cpu.h mem.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c e1000.c -o $@
+
+$(BUILD_DIR)/net.o: net.c net.h cpu.h mem.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c net.c -o $@
 
 $(BUILD_DIR)/audio.o: audio.c audio.h pci.h cpu.h mem.h
 	@mkdir -p $(BUILD_DIR)

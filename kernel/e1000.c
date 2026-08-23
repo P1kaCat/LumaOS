@@ -1,4 +1,4 @@
-﻿/* e1000.c — Intel 82540EM Gigabit Ethernet Network Driver
+/* e1000.c — Intel 82540EM Gigabit Ethernet Network Driver
  *
  * Phase 8: Network subsystem & Intel 82540EM (e1000) driver.
  */
@@ -230,4 +230,11 @@ int e1000_recv_packet(void *buf, uint16_t max_len) {
     e1000_write32(E1000_REG_RDT, cur);
 
     return (int)len;
+}
+
+void e1000_get_mac(uint8_t *mac_out) {
+    if (!mac_out) return;
+    for (int i = 0; i < 6; i++) {
+        mac_out[i] = g_e1000_mac[i];
+    }
 }

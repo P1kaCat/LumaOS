@@ -209,3 +209,34 @@ $$\text{Userland} \longrightarrow \text{Syscalls (open/close/read/exec)} \longri
 - Allocation de l'anneau d'émission TX (16 descripteurs de buffers 2 Ko) et configuration de `TCTL`.
 - Moteur d'émission de trames Ethernet (`e1000_send_packet`) et de réception (`e1000_recv_packet`).
 
+### Pile Réseau TCP/IP (Phase 8 — `net.c`)
+
+**Structure de l'Interface Réseau** (`struct net_if`) :
+- Adresse MAC (copiée depuis le driver e1000), IPv4 `10.0.2.15`, masque `255.255.255.0`, passerelle `10.0.2.2`, DNS `10.0.2.3` (réseau QEMU `-netdev user`).
+- Compteurs de statistiques : `rx_packets`, `tx_packets`, `rx_bytes`, `tx_bytes`.
+
+**Couche Liaison Ethernet II** :
+- `eth_send(dst_mac, ethertype, payload, len)` : Construit une trame Ethernet II (header 14 octets + payload), padding à 60 octets minimum, puis appelle `e1000_send_packet`.
+- `net_poll()` : Lit les paquets reçus avec `e1000_recv_packet` et les dispatche par EtherType (`0x0806` → ARP, `0x0800` → IPv4).
+
+**Protocole ARP** :
+- Cache ARP : Tableau de 16 entrées (`struct arp_entry { ip, mac[6], valid }`). Recherche O(n).
+- `arp_resolve(ip, mac_out)` : Si IP en cache → retour immédiat. Sinon, envoi d'une requête ARP broadcast (*who-has*) puis polling de `net_poll()` jusqu'à réception de la réponse (ou timeout).
+- `handle_arp(packet, len)` : Insère l'émetteur dans le cache. Si opération = REQUEST et `target_ip == our_ip`, envoie une réponse ARP unicast (*is-at*).
+
+**Protocole IPv4** :
+- `net_checksum(data, len)` : Somme en complément à 1 sur 16 bits (RFC 791).
+- `ipv4_send(dst_ip, protocol, payload, len)` : Construit un en-tête IPv4 (version 4, IHL = 5, TTL = 64, Don't Fragment `0x4000`), calcule le checksum, détermine le prochain saut (même sous-réseau → direct, sinon → `g_net_if.gateway`), résout l'adresse MAC via `arp_resolve`, et envoie via `eth_send`.
+
+**Protocole ICMP** :
+- `icmp_ping(dst_ip, seq)` : Construit un paquet Echo Request (type 8, code 0) avec identifiant `0x1234` et 32 octets de payload. Calcule le checksum ICMP et appelle `ipv4_send` avec `IP_PROTO_ICMP`.
+- `handle_ipv4 → ICMP` : Répondeur automatique : si le paquet reçu est un Echo Request destiné à notre IP, construit un Echo Reply (type 0), recalcule le checksum et envoie via `ipv4_send`.
+
+**Protocole UDP** :
+- `udp_send(dst_ip, src_port, dst_port, data, len)` : Construit un en-tête UDP (8 octets, checksum = 0 optionnel en IPv4) et envoie via `ipv4_send` avec `IP_PROTO_UDP`.
+
+**Fonctions Utilitaires** :
+- `htons / ntohs / htonl / ntohl` : Conversions Byte Order (Little Endian hôte ↔ Big Endian réseau).
+- `print_ip(ip)` : Affichage d'une adresse IPv4 au format pointé sur la liaison série.
+
+

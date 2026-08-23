@@ -216,8 +216,9 @@ void kernel_main(struct lumaos_handoff *ho) {
     /* ---- Phase 7d: NVMe PCIe Controller ---- */
     nvme_init();
 
-    /* ---- Phase 8: Intel e1000 Network Controller ---- */
+    /* ---- Phase 8: Intel e1000 Network Controller & TCP/IP Stack ---- */
     e1000_init();
+    net_init();
 
     /* ---- Phase 7e: Intel High Definition Audio ---- */
     audio_init();

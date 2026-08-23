@@ -233,7 +233,8 @@ jobs:
             "[AHCI7c] controller initialized + ports scanned" \
             "[NVME7d] controller initialized + admin queue ready" \
             "[E1000-8] ethernet controller initialized + MAC read" \
-            "[HDA7e] audio controller initialized + CORB/RIRB ready"
+            "[HDA7e] audio controller initialized + CORB/RIRB ready" \
+            "[NET8] network stack (ARP + IPv4 + ICMP + UDP) initialized"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"
