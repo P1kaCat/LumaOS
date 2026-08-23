@@ -7,14 +7,9 @@
  * struct (ho->rsdp). The kernel uses identity mapping, so physical
  * addresses work directly as pointers.
  *
- * Flow:
- *   1. Validate RSDP signature + checksum
- *   2. Follow xsdt_address (64-bit) to XSDT
- *   3. Validate XSDT signature + checksum
- *   4. Enumerate XSDT entries (array of 64-bit pointers)
- *   5. Find MADT, FADT, MCFG by signature
- *   6. Parse and print key fields
- *   7. Store pointers in globals for future drivers
+ * XSDT entries are accessed via explicit pointer arithmetic:
+ *   uint64_t *entries = (uint64_t *)((uint8_t *)xsdt + 36);
+ * Never via struct flexible array (compiler padding would misalign).
  */
 #include "acpi.h"
 #include "cpu.h"  /* serial_puts */
@@ -44,15 +39,6 @@ static char *uxtoa(uint64_t n, char *buf) {
     int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
 }
 
-static char *uxtoa_pad(uint64_t n, char *buf, int width) {
-    char tmp[32]; int i=0;
-    const char *h="0123456789ABCDEF";
-    if (!n) { tmp[i++]='0'; }
-    while (n) { tmp[i++]=h[n&0xF]; n>>=4; }
-    while (i < width) tmp[i++]='0';
-    int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
-}
-
 /* Compare first 4 bytes (ACPI signatures are exactly 4 chars) */
 static int sig4_equal(const char *a, const char *b) {
     for (int i = 0; i < 4; i++)
@@ -64,7 +50,7 @@ static int sig4_equal(const char *a, const char *b) {
 
 int acpi_validate_checksum(struct acpi_sdt_header *sdt) {
     uint32_t len = sdt->length;
-    if (len < 36) return 0;  /* too small to be a valid SDT */
+    if (len < sizeof(struct acpi_sdt_header)) return 0;
 
     uint8_t *p = (uint8_t *)sdt;
     uint8_t sum = 0;
@@ -73,31 +59,47 @@ int acpi_validate_checksum(struct acpi_sdt_header *sdt) {
     return sum == 0;
 }
 
-/* Validate RSDP checksum (ACPI 2.0+ covers entire RSDP, 36 bytes) */
+/* Validate RSDP (ACPI 2.0+: checksum over full length) */
 static int rsdp_validate(struct acpi_rsdp *rsdp) {
-    /* Check signature "RSD PTR " */
     const char expected[8] = {'R','S','D',' ','P','T','R',' '};
     for (int i = 0; i < 8; i++)
         if (rsdp->signature[i] != expected[i]) return 0;
 
-    /* For ACPI 2.0+ (revision >= 2), validate extended checksum over
-     * the full RSDP length (36 bytes). */
     if (rsdp->revision >= 2 && rsdp->length >= 36) {
         uint8_t *p = (uint8_t *)rsdp;
         uint8_t sum = 0;
         for (uint32_t i = 0; i < rsdp->length; i++)
             sum = (uint8_t)(sum + p[i]);
-        if (sum != 0) return 0;
+        return sum == 0;
     } else {
         /* ACPI 1.0: checksum over first 20 bytes */
         uint8_t *p = (uint8_t *)rsdp;
         uint8_t sum = 0;
         for (int i = 0; i < 20; i++)
             sum = (uint8_t)(sum + p[i]);
-        if (sum != 0) return 0;
+        return sum == 0;
     }
+}
 
-    return 1;
+/* ===== XSDT entry access via explicit pointer arithmetic =====
+ *
+ * XSDT layout:  [acpi_sdt_header (36 bytes)] [uint64_t entry[0]] [uint64_t entry[1]] ...
+ *
+ * We compute entries pointer as: (uint64_t *)(base + 36)
+ * This avoids any compiler-inserted padding that a flexible array
+ * member would introduce.
+ */
+
+static uint64_t *xsdt_entries(struct acpi_xsdt *xsdt) {
+    return (uint64_t *)((uint8_t *)xsdt + sizeof(struct acpi_sdt_header));
+}
+
+static uint32_t xsdt_entry_count(struct acpi_xsdt *xsdt) {
+    uint32_t length = xsdt->header.length;
+    if (length < sizeof(struct acpi_sdt_header))
+        return 0;
+    uint32_t entries_bytes = length - sizeof(struct acpi_sdt_header);
+    return entries_bytes / sizeof(uint64_t);
 }
 
 /* ===== Find table by signature in XSDT ===== */
@@ -106,11 +108,11 @@ struct acpi_sdt_header *acpi_find_table(const char signature[4]) {
     if (!g_acpi_xsdt) return 0;
 
     struct acpi_xsdt *xsdt = (struct acpi_xsdt *)g_acpi_xsdt;
-    /* Number of entries = (header.length - sizeof(header)) / sizeof(uint64_t) */
-    uint32_t entry_count = (xsdt->header.length - sizeof(struct acpi_sdt_header)) / 8;
+    uint32_t count = xsdt_entry_count(xsdt);
+    uint64_t *entries = xsdt_entries(xsdt);
 
-    for (uint32_t i = 0; i < entry_count; i++) {
-        struct acpi_sdt_header *sdt = (struct acpi_sdt_header *)xsdt->entries[i];
+    for (uint32_t i = 0; i < count; i++) {
+        struct acpi_sdt_header *sdt = (struct acpi_sdt_header *)entries[i];
         if (!sdt) continue;
         if (sig4_equal(sdt->signature, signature))
             return sdt;
@@ -132,14 +134,14 @@ static void parse_madt(struct acpi_madt *madt) {
     serial_puts(uxtoa(madt->flags, buf));
     serial_puts(madt->flags & 1 ? " (PCAT_COMPAT)\n" : "\n");
 
-    /* Count interrupt controller structures */
+    /* Walk interrupt controller structures */
     uint8_t *p = (uint8_t *)madt + sizeof(struct acpi_madt);
     uint8_t *end = (uint8_t *)madt + madt->header.length;
     int num_lapic = 0, num_ioapic = 0, num_other = 0;
 
     while (p + 2 <= end) {
         struct acpi_madt_entry_header *eh = (struct acpi_madt_entry_header *)p;
-        if (eh->length == 0) break;  /* safety */
+        if (eh->length == 0) break;
 
         switch (eh->type) {
             case ACPI_MADT_TYPE_LAPIC:
@@ -147,20 +149,17 @@ static void parse_madt(struct acpi_madt *madt) {
                 break;
             case ACPI_MADT_TYPE_IOAPIC:
                 num_ioapic++;
-                {
-                    /* IOAPIC entry: header(2) + id(1) + reserved(1) + addr(4) + gsi_base(4) */
-                    if (p + 12 <= end) {
-                        uint8_t ioapic_id = p[2];
-                        uint32_t ioapic_addr = *(uint32_t *)(p + 4);
-                        uint32_t gsi_base = *(uint32_t *)(p + 8);
-                        serial_puts("  IOAPIC id=");
-                        serial_puts(uitoa(ioapic_id, buf));
-                        serial_puts(" addr=0x");
-                        serial_puts(uxtoa(ioapic_addr, buf));
-                        serial_puts(" gsi_base=");
-                        serial_puts(uitoa(gsi_base, buf));
-                        serial_puts("\n");
-                    }
+                if (p + 12 <= end) {
+                    uint8_t ioapic_id = p[2];
+                    uint32_t ioapic_addr = *(uint32_t *)(p + 4);
+                    uint32_t gsi_base = *(uint32_t *)(p + 8);
+                    serial_puts("  IOAPIC id=");
+                    serial_puts(uitoa(ioapic_id, buf));
+                    serial_puts(" addr=0x");
+                    serial_puts(uxtoa(ioapic_addr, buf));
+                    serial_puts(" gsi_base=");
+                    serial_puts(uitoa(gsi_base, buf));
+                    serial_puts("\n");
                 }
                 break;
             default:
@@ -199,7 +198,7 @@ static void parse_fadt(struct acpi_fadt *fadt) {
     serial_puts(uxtoa(fadt->pm_tmr_blk, buf));
     serial_puts("\n");
 
-    /* Try to read 64-bit DSDT pointer (ACPI 2.0+) */
+    /* 64-bit DSDT pointer (ACPI 2.0+) via raw offset */
     if (fadt->header.length >= ACPI_FADT_X_DSDT_OFFSET + 8) {
         uint64_t x_dsdt = *(uint64_t *)((uint8_t *)fadt + ACPI_FADT_X_DSDT_OFFSET);
         if (x_dsdt) {
@@ -223,8 +222,7 @@ static void parse_mcfg(struct acpi_mcfg *mcfg) {
     serial_puts(uxtoa((uint64_t)(unsigned long)mcfg, buf));
     serial_puts("\n");
 
-    /* MCFG has a reserved field (8 bytes) after the header, then
-     * allocation entries (16 bytes each). */
+    /* MCFG: header (36) + reserved (8) = 44, then allocation entries (16 each) */
     uint8_t *p = (uint8_t *)mcfg + sizeof(struct acpi_mcfg);
     uint8_t *end = (uint8_t *)mcfg + mcfg->header.length;
     int num_entries = 0;
@@ -290,7 +288,8 @@ void acpi_init(uint64_t rsdp_phys) {
     serial_puts("\n");
 
     /* === 2. Validate XSDT === */
-    struct acpi_sdt_header *xsdt_hdr = (struct acpi_sdt_header *)(unsigned long)rsdp->xsdt_address;
+    struct acpi_sdt_header *xsdt_hdr =
+        (struct acpi_sdt_header *)(unsigned long)rsdp->xsdt_address;
     g_acpi_xsdt = xsdt_hdr;
 
     if (!sig4_equal(xsdt_hdr->signature, "XSDT")) {
@@ -303,9 +302,10 @@ void acpi_init(uint64_t rsdp_phys) {
         return;
     }
 
-    /* === 3. Enumerate XSDT entries === */
+    /* === 3. Enumerate XSDT entries (explicit pointer arithmetic) === */
     struct acpi_xsdt *xsdt = (struct acpi_xsdt *)xsdt_hdr;
-    uint32_t entry_count = (xsdt->header.length - sizeof(struct acpi_sdt_header)) / 8;
+    uint32_t entry_count = xsdt_entry_count(xsdt);
+    uint64_t *entries = xsdt_entries(xsdt);
     g_acpi_num_tables = (int)entry_count;
 
     serial_puts("  XSDT has ");
@@ -313,10 +313,10 @@ void acpi_init(uint64_t rsdp_phys) {
     serial_puts(" table entries\n");
 
     for (uint32_t i = 0; i < entry_count; i++) {
-        struct acpi_sdt_header *entry = (struct acpi_sdt_header *)xsdt->entries[i];
+        struct acpi_sdt_header *entry =
+            (struct acpi_sdt_header *)entries[i];
         if (!entry) continue;
 
-        /* Print 4-char signature + address */
         char sig[5];
         sig[0] = entry->signature[0];
         sig[1] = entry->signature[1];

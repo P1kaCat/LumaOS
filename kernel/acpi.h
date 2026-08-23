@@ -3,12 +3,10 @@
  * Parses ACPI 2.0+ tables from the RSDP provided by UEFI:
  *   RSDP → XSDT → MADT, FADT, MCFG
  *
- * The kernel receives the RSDP physical address from the bootloader
- * via the handoff struct. All ACPI tables are in memory that survives
- * ExitBootServices (EFI_RUNTIME_SERVICES_DATA).
- *
- * Memory model: identity-mapped, so physical addresses can be used
- * directly as pointers.
+ * IMPORTANT: ACPI table layout is packed — no compiler padding.
+ * XSDT entries start at offset 36 (sizeof acpi_sdt_header), NOT
+ * at a compiler-aligned offset. We use explicit pointer arithmetic
+ * to access entries and never rely on struct flexible arrays.
  */
 #ifndef LUMAOS_ACPI_H
 #define LUMAOS_ACPI_H
@@ -16,8 +14,7 @@
 #include <stdint.h>
 
 /* ===== RSDP (Root System Description Pointer) =====
- * ACPI 2.0+: 36 bytes (extended fields present)
- * ACPI 1.0:   20 bytes (no extended fields)
+ * ACPI 2.0+: 36 bytes. Naturally aligned (uint64_t at offset 24).
  */
 struct acpi_rsdp {
     char     signature[8];      /* "RSD PTR " (note trailing space) */
@@ -29,14 +26,16 @@ struct acpi_rsdp {
     uint64_t xsdt_address;      /* 64-bit XSDT (ACPI 2.0+) */
     uint8_t  extended_checksum; /* ACPI 2.0+ checksum (sum of all bytes = 0) */
     uint8_t  reserved[3];
-};
+};  /* 36 bytes — naturally aligned */
 
-/* ===== ACPI table header (common to all SDTs) ===== */
+/* ===== ACPI table header (common to all SDTs) =====
+ * 36 bytes. All fields ≤ uint32_t, natural alignment = 4.
+ */
 struct acpi_sdt_header {
-    char     signature[4];      /* e.g. "XSDT", "APIC", "FACP", "MCFG" */
-    uint32_t length;            /* Total length including header */
+    char     signature[4];
+    uint32_t length;
     uint8_t  revision;
-    uint8_t  checksum;          /* Sum of all bytes = 0 mod 256 */
+    uint8_t  checksum;
     char     oem_id[6];
     char     oem_table_id[8];
     uint32_t oem_revision;
@@ -45,15 +44,20 @@ struct acpi_sdt_header {
 };  /* 36 bytes */
 
 /* ===== XSDT (Extended System Description Table) =====
- * Header + array of 64-bit pointers to other SDTs
+ * Header (36 bytes) + array of uint64_t pointers.
+ * We do NOT declare a flexible array member — the compiler would
+ * insert padding to align uint64_t to 8 bytes, shifting entries
+ * by 4 bytes. Instead, access entries via explicit pointer arithmetic:
+ *
+ *   uint64_t *entries = (uint64_t *)((uint8_t *)xsdt + sizeof(struct acpi_sdt_header));
  */
 struct acpi_xsdt {
     struct acpi_sdt_header header;
-    uint64_t entries[0];       /* Variable length array */
 };
 
 /* ===== MADT (Multiple APIC Description Table) =====
  * Signature: "APIC"
+ * Header (36) + uint32_t (4) + uint32_t (4) = 44 bytes. All aligned.
  */
 struct acpi_madt {
     struct acpi_sdt_header header;
@@ -64,11 +68,10 @@ struct acpi_madt {
 
 /* MADT interrupt controller structure header */
 struct acpi_madt_entry_header {
-    uint8_t type;   /* 0 = LAPIC, 1 = IOAPIC, 2 = Int Source Override, ... */
-    uint8_t length; /* Length of this entry including header */
+    uint8_t type;
+    uint8_t length;
 };
 
-/* MADT entry types */
 #define ACPI_MADT_TYPE_LAPIC        0
 #define ACPI_MADT_TYPE_IOAPIC       1
 #define ACPI_MADT_TYPE_INT_SRC_OVR   2
@@ -76,16 +79,17 @@ struct acpi_madt_entry_header {
 
 /* ===== FADT (Fixed ACPI Description Table) =====
  * Signature: "FACP"
- * Minimal definition — enough to read key fields.
+ * All fields are uint32_t/uint16_t/uint8_t — naturally aligned.
+ * 64-bit extended fields (ACPI 2.0+) are read via raw offsets.
  */
 struct acpi_fadt {
     struct acpi_sdt_header header;
-    uint32_t firmware_ctrl;        /* FACS (32-bit, ACPI 1.0) */
-    uint32_t dsdt;                 /* DSDT (32-bit, ACPI 1.0) */
+    uint32_t firmware_ctrl;
+    uint32_t dsdt;
     uint8_t  reserved;
     uint8_t  preferred_pm_profile;
-    uint16_t sci_int;              /* SCI interrupt vector (GSI) */
-    uint32_t smi_cmd;              /* SMI command port */
+    uint16_t sci_int;
+    uint32_t smi_cmd;
     uint8_t  acpi_enable;
     uint8_t  acpi_disable;
     uint8_t  s4bios_req;
@@ -117,31 +121,25 @@ struct acpi_fadt {
     uint8_t  century;
     uint8_t  reserved2[3];
     uint32_t flags2;
-    /* ACPI 2.0+ extended fields follow... */
-    /* We read x_firmware_ctrl and x_dsdt at known offsets */
+    /* ACPI 2.0+ extended fields follow — read via raw offset */
 };
 
-/* FADT ACPI 2.0+ extended field offsets (from FADT start) */
-/* After the 32-bit fields, at offset 76 in the struct above,
- * ACPI 2.0+ adds:
- *   uint32_t flags2;
- *   uint64_t x_firmware_ctrl;  (FACS, 64-bit)
- *   uint64_t x_dsdt;           (DSDT, 64-bit)
- * We read these as raw offsets to avoid struct complexity.
- */
-#define ACPI_FADT_X_DSDT_OFFSET  88   /* offset of x_dsdt from FADT start (ACPI 2.0+) */
+/* FADT ACPI 2.0+ x_dsdt offset from FADT start */
+#define ACPI_FADT_X_DSDT_OFFSET  88
 
 /* ===== MCFG (PCI Express Memory Mapped Config) =====
  * Signature: "MCFG"
+ * Packed: header (36) + uint64_t reserved (8) = 44 bytes.
+ * The uint64_t at offset 36 is NOT 8-byte aligned → packed required.
  */
 struct acpi_mcfg {
     struct acpi_sdt_header header;
-    uint64_t reserved;       /* Must be 0 */
-    /* Followed by allocation entries (16 bytes each) */
-};
+    uint64_t reserved;
+} __attribute__((packed));
 
+/* MCFG allocation entry (16 bytes, naturally aligned) */
 struct acpi_mcfg_allocation {
-    uint64_t base_address;       /* ECAM base address */
+    uint64_t base_address;
     uint16_t pci_segment_group;
     uint8_t  start_bus_number;
     uint8_t  end_bus_number;
@@ -159,13 +157,8 @@ extern int                    g_acpi_num_tables;
 
 /* ===== API ===== */
 
-/* Parse ACPI tables from RSDP. Called from kernel_main with ho->rsdp. */
 void acpi_init(uint64_t rsdp_phys);
-
-/* Validate an ACPI SDT checksum (sum of all bytes = 0 mod 256). */
 int acpi_validate_checksum(struct acpi_sdt_header *sdt);
-
-/* Find an SDT in the XSDT by 4-char signature. Returns NULL if not found. */
 struct acpi_sdt_header *acpi_find_table(const char signature[4]);
 
 #endif /* LUMAOS_ACPI_H */
