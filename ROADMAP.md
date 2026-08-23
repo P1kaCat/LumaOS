@@ -16,7 +16,7 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] Boot marker verification (9 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
-  - `[CAT6] test passed`, `[INIT5] test passed`
+  - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
 - [x] Serial log artifact upload on failure
 
 Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers), `c15678e` (added [INIT5] marker), `8065462` (added [CAT6] marker + cat sendkey)
@@ -159,12 +159,12 @@ Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display 
 - [x] Clean `init → shell` separation (init_code.S + shell_code.S)
 - [x] Syscall 11 (`spawn`) — init spawns shell as PID 2
 - [x] `[INIT5] test passed` CI marker
-- [ ] User program loader from a file
+- [x] User program loader from a file (ELF64 via syscall 12)
 
 ---
 
 ## Phase 6 — Filesystem & Storage
-**Status: 🔄 In Progress**
+**Status: ✅ Completed**
 
 ### Layered architecture
 ```
@@ -205,12 +205,25 @@ Userland → Syscalls → VFS → FAT32 → Block Device → ATA/IDE → Disk
 - [x] Ring 3 regression test (10 tests, `[SYSCALL6] test passed`)
 - [x] Large page fix: `get_page()` handles 2MB/1GB pages (PTE_PS)
 
-### Userland — 🔄 In Progress
+### Userland — ✅ Done
 - [x] `cat hello.txt` shell command (open → read loop → write → close)
 - [x] Error handling: file not found, read error, EOF
 - [x] Automated `[CAT6] test passed` CI marker (init_code.S)
 - [x] CI sendkey injection: `cat hello.txt` typed in shell via QEMU monitor
-- [ ] File-based user program loader
+- [x] **ELF64 user program loader** (spawn_file / syscall 12)
+  - [x] ELF64 header validation (magic, class, endianness, type, machine)
+  - [x] Program header parsing (PT_LOAD segments)
+  - [x] Per-segment page allocation and mapping at p_vaddr
+  - [x] File data copy (p_filesz bytes from file offset)
+  - [x] BSS zero-fill (p_memsz - p_filesz)
+  - [x] Permission mapping (PF_R → PTE_USER, PF_W → PTE_WRITABLE, PF_X)
+  - [x] Entry point: RIP = e_entry from ELF header
+  - [x] Standalone ELF64 user program (userprogs/hello.S + userprog.ld)
+  - [x] `run FILE` shell command (syscall 12 = exec)
+  - [x] Init exec test: loads prog.elf, verifies spawn, sleeps for execution
+  - [x] Multi-cluster FAT32 file support (create_disk.py)
+  - [x] Automated `[EXEC12] test passed` CI marker
+  - [x] CI sendkey injection: `run prog.elf` typed in shell via QEMU monitor
 
 ---
 

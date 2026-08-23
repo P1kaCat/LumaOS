@@ -155,6 +155,24 @@ jobs:
           # Wait for cat to finish printing the file content
           time.sleep(3)
 
+          # Type "run prog.elf" + Enter
+          # Loads and executes the ELF64 program from FAT32 via syscall 12
+          # r=0x13, u=0x16, n=0x31, spc=0x39,
+          # p=0x19, r=0x13, o=0x18, g=0x22,
+          # .=shift+semicolon(0x33), e=0x12, l=0x26, f=0x21
+          run_keys = [
+              'r', 'u', 'n', 'spc',
+              'p', 'r', 'o', 'g',
+              'shift-semicolon',
+              'e', 'l', 'f', 'ret'
+          ]
+          for key in run_keys:
+              send_key(key)
+          print("Sent 'run prog.elf' + Enter via QEMU monitor")
+
+          # Wait for program to load and run
+          time.sleep(3)
+
           # Type "exit" + Enter
           exit_keys = ['e', 'x', 'i', 't', 'ret']
           for key in exit_keys:
@@ -193,7 +211,8 @@ jobs:
             "[VFS] test passed" \
             "[SYSCALL6] test passed" \
             "[CAT6] test passed" \
-            "[INIT5] test passed"
+            "[INIT5] test passed" \
+            "[EXEC12] test passed"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"

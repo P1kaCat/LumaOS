@@ -281,6 +281,40 @@ init_code_start:
     movq $1, %rsi
     int $0x80
 
+
+    /* ---- Phase 6: File-based program loader test ----
+     * Load PROG.BIN from FAT32 via syscall 12 (exec).
+     * The loaded program prints "[EXEC12] test passed".
+     */
+    movq $12, %rax            /* exec(path) */
+    leaq path_prog(%rip), %rdi
+    int $0x80
+    cmpq $0, %rax
+    jl .exec_fail
+
+    /* Sleep 50 ticks (1 second) to let the loaded program run */
+    movq $5, %rax             /* sleep(ticks) */
+    movq $50, %rdi
+    int $0x80
+
+    leaq msg_exec_ok(%rip), %rdi
+    xorq %rax, %rax
+    movq $16, %rsi
+    int $0x80
+    jmp .exec_done
+
+.exec_fail:
+    leaq msg_exec_fail(%rip), %rdi
+    xorq %rax, %rax
+    movq $18, %rsi
+    int $0x80
+
+.exec_done:
+    leaq nl_str(%rip), %rdi
+    xorq %rax, %rax
+    movq $1, %rsi
+    int $0x80
+
     /* ---- Spawn shell process (PID 2) ---- */
     movq $11, %rax            /* spawn(prog_id) */
     xorq %rdi, %rdi           /* prog_id = 0 (shell) */
@@ -355,5 +389,12 @@ msg_init5_pass:
     .asciz "[INIT5] test passed\n"
 msg_init5_fail:
     .asciz "[INIT5] spawn FAIL\n"
+
+path_prog:
+    .asciz "prog.elf"
+msg_exec_ok:
+    .asciz "[EXEC] spawn OK\n"
+msg_exec_fail:
+    .asciz "[EXEC] spawn FAIL\n"
 
 init_code_end:

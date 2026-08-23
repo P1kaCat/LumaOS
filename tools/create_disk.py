@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """create_disk.py - Create a minimal FAT32 disk image for LumaOS Phase 6.
 
-Creates a 64MB raw disk image with a FAT32 filesystem containing test files.
-No external tools required - builds the FAT32 structures directly.
+Creates a 64MB raw disk image with a FAT32 filesystem containing test files
+and an ELF64 user program. No external tools required - builds the FAT32
+structures directly.
 
-Usage: python3 tools/create_disk.py build/disk.img
+Usage: python3 tools/create_disk.py build/disk.img [prog.elf]
 """
 
 import struct
@@ -18,8 +19,9 @@ SECTORS_PER_CLUSTER = 1
 RESERVED_SECTORS = 32
 NUM_FATS = 2
 FAT_ENTRY_SIZE = 4  # 4 bytes per entry in FAT32
+CLUSTER_SIZE = BYTES_PER_SECTOR * SECTORS_PER_CLUSTER  # 512 bytes
 
-def create_disk(path):
+def create_disk(path, prog_path=None):
     total_sectors = (DISK_SIZE_MB * 1024 * 1024) // BYTES_PER_SECTOR
 
     # Calculate FAT size (sectors per FAT)
@@ -53,28 +55,28 @@ def create_disk(path):
     disk = bytearray(total_sectors * BYTES_PER_SECTOR)
 
     # ===== Boot sector / BPB (sector 0) =====
-    disk[0:3] = b'\xEB\x58\x90'  # jmp short +0x58, nop
-    disk[3:11] = b'MSDOS5.0'     # OEM name (8 bytes)
+    disk[0:3] = b'\xEB\x58\x90'
+    disk[3:11] = b'MSDOS5.0'
 
-    struct.pack_into('<H', disk, 11, BYTES_PER_SECTOR)       # bytes per sector
-    disk[13] = SECTORS_PER_CLUSTER                            # sectors per cluster
-    struct.pack_into('<H', disk, 14, RESERVED_SECTORS)        # reserved sectors
-    disk[16] = NUM_FATS                                       # number of FATs
-    struct.pack_into('<H', disk, 17, 0)                      # root entry count (0 for FAT32)
-    struct.pack_into('<H', disk, 19, 0)                       # total sectors 16-bit (0)
-    struct.pack_into('<I', disk, 32, total_sectors)           # total sectors 32-bit
-    struct.pack_into('<I', disk, 36, fat_size)               # FAT size 32
-    struct.pack_into('<H', disk, 40, 0)                       # extended flags
-    struct.pack_into('<H', disk, 42, 0)                       # FS version
-    struct.pack_into('<I', disk, 44, 2)                        # root cluster
-    struct.pack_into('<H', disk, 48, 1)                       # FS info sector
-    struct.pack_into('<H', disk, 50, 6)                       # backup boot sector
-    disk[64] = 0x80                                            # drive number
-    disk[66] = 0x29                                            # extended boot signature
-    struct.pack_into('<I', disk, 67, 0x12345678)              # volume serial
-    disk[71:82] = b'LUMAOS DISK'                              # volume label (11 bytes)
-    disk[82:90] = b'FAT32   '                                 # FS type (8 bytes)
-    disk[510] = 0x55                                           # boot signature
+    struct.pack_into('<H', disk, 11, BYTES_PER_SECTOR)
+    disk[13] = SECTORS_PER_CLUSTER
+    struct.pack_into('<H', disk, 14, RESERVED_SECTORS)
+    disk[16] = NUM_FATS
+    struct.pack_into('<H', disk, 17, 0)
+    struct.pack_into('<H', disk, 19, 0)
+    struct.pack_into('<I', disk, 32, total_sectors)
+    struct.pack_into('<I', disk, 36, fat_size)
+    struct.pack_into('<H', disk, 40, 0)
+    struct.pack_into('<H', disk, 42, 0)
+    struct.pack_into('<I', disk, 44, 2)         # root cluster
+    struct.pack_into('<H', disk, 48, 1)         # FS info sector
+    struct.pack_into('<H', disk, 50, 6)         # backup boot sector
+    disk[64] = 0x80
+    disk[66] = 0x29
+    struct.pack_into('<I', disk, 67, 0x12345678)
+    disk[71:82] = b'LUMAOS DISK'
+    disk[82:90] = b'FAT32   '
+    disk[510] = 0x55
     disk[511] = 0xAA
 
     # ===== FS Info sector (sector 1) =====
@@ -85,7 +87,7 @@ def create_disk(path):
     struct.pack_into('<I', disk, fsinfo_off + 492, 0xFFFFFFFF)
     struct.pack_into('<I', disk, fsinfo_off + 508, 0xAA550000)
 
-    # ===== FAT tables (2 copies) =====
+    # ===== Prepare FAT table =====
     fat_start = RESERVED_SECTORS
     fat = bytearray(fat_size * BYTES_PER_SECTOR)
 
@@ -96,72 +98,109 @@ def create_disk(path):
     struct.pack_into('<I', fat, 3 * 4, 0x0FFFFFFF)  # entry 3: hello.txt (EOC, 1 cluster)
     struct.pack_into('<I', fat, 4 * 4, 0x0FFFFFFF)  # entry 4: test.txt (EOC, 1 cluster)
 
-    for i in range(NUM_FATS):
-        offset = (fat_start + i * fat_size) * BYTES_PER_SECTOR
-        disk[offset:offset + len(fat)] = fat
+    next_free_cluster = 5  # next available cluster for new files
 
     # ===== Root directory (cluster 2) =====
     root_dir_sector = data_start
     root_offset = root_dir_sector * BYTES_PER_SECTOR
+    dir_entry_idx = 0  # current directory entry index
 
-    # hello.txt
+    def write_dir_entry(idx, name83, attr, first_cluster, file_size):
+        """Write a 32-byte FAT32 directory entry at the given index."""
+        off = root_offset + idx * 32
+        entry = bytearray(32)
+        entry[0:11] = name83
+        entry[11] = attr
+        struct.pack_into('<H', entry, 14, 0x8000)  # creation time
+        struct.pack_into('<H', entry, 16, 0x4A21)  # creation date
+        struct.pack_into('<H', entry, 18, 0x4A21)  # last access date
+        struct.pack_into('<H', entry, 20, (first_cluster >> 16) & 0xFFFF)  # first cluster high
+        struct.pack_into('<H', entry, 22, 0x8000)  # write time
+        struct.pack_into('<H', entry, 24, 0x4A21)  # write date
+        struct.pack_into('<H', entry, 26, first_cluster & 0xFFFF)  # first cluster low
+        struct.pack_into('<I', entry, 28, file_size)
+        disk[off:off + 32] = entry
+
+    def cluster_to_offset(cluster):
+        """Convert cluster number to byte offset in the disk image."""
+        return (data_start + (cluster - 2) * SECTORS_PER_CLUSTER) * BYTES_PER_SECTOR
+
+    # --- hello.txt (cluster 3, 1 cluster) ---
     hello_data = b"Hello from LumaOS!\n"
-    hello_size = len(hello_data)
+    write_dir_entry(dir_entry_idx, b'HELLO   TXT', 0x20, 3, len(hello_data))
+    dir_entry_idx += 1
 
-    entry = bytearray(32)
-    entry[0:11] = b'HELLO   TXT'
-    entry[11] = 0x20  # attr: archive
-    struct.pack_into('<H', entry, 14, 0x8000)  # creation time
-    struct.pack_into('<H', entry, 16, 0x4A21)  # creation date
-    struct.pack_into('<H', entry, 18, 0x4A21)  # last access date
-    struct.pack_into('<H', entry, 20, 0)       # first cluster high
-    struct.pack_into('<H', entry, 22, 0x8000)  # write time
-    struct.pack_into('<H', entry, 24, 0x4A21)  # write date
-    struct.pack_into('<H', entry, 26, 3)       # first cluster low
-    struct.pack_into('<I', entry, 28, hello_size)
-    disk[root_offset:root_offset + 32] = entry
+    cl3_off = cluster_to_offset(3)
+    disk[cl3_off:cl3_off + len(hello_data)] = hello_data
 
-    # test.txt
+    # --- test.txt (cluster 4, 1 cluster) ---
     test_data = b"This is a test file.\nLine 2\n"
-    test_size = len(test_data)
+    write_dir_entry(dir_entry_idx, b'TEST    TXT', 0x20, 4, len(test_data))
+    dir_entry_idx += 1
 
-    entry2 = bytearray(32)
-    entry2[0:11] = b'TEST    TXT'
-    entry2[11] = 0x20
-    struct.pack_into('<H', entry2, 14, 0x8000)
-    struct.pack_into('<H', entry2, 16, 0x4A21)
-    struct.pack_into('<H', entry2, 18, 0x4A21)
-    struct.pack_into('<H', entry2, 20, 0)
-    struct.pack_into('<H', entry2, 22, 0x8000)
-    struct.pack_into('<H', entry2, 24, 0x4A21)
-    struct.pack_into('<H', entry2, 26, 4)
-    struct.pack_into('<I', entry2, 28, test_size)
-    disk[root_offset + 32:root_offset + 64] = entry2
+    cl4_off = cluster_to_offset(4)
+    disk[cl4_off:cl4_off + len(test_data)] = test_data
+
+    # --- prog.elf (ELF64 user program, multi-cluster) ---
+    prog_size = 0
+    if prog_path and os.path.exists(prog_path):
+        with open(prog_path, 'rb') as f:
+            prog_data = f.read()
+        prog_size = len(prog_data)
+
+        # Calculate clusters needed
+        num_clusters = (prog_size + CLUSTER_SIZE - 1) // CLUSTER_SIZE
+        first_prog_cluster = next_free_cluster
+
+        print(f"\nELF program: {prog_path} ({prog_size} bytes, {num_clusters} clusters)")
+
+        # Set up FAT chain: first_prog_cluster → ... → EOC
+        for i in range(num_clusters):
+            cluster = first_prog_cluster + i
+            if i == num_clusters - 1:
+                struct.pack_into('<I', fat, cluster * 4, 0x0FFFFFFF)  # EOC
+            else:
+                struct.pack_into('<I', fat, cluster * 4, cluster + 1)  # next cluster
+
+        # Write directory entry: PROG.ELF
+        write_dir_entry(dir_entry_idx, b'PROG    ELF', 0x20, first_prog_cluster, prog_size)
+        dir_entry_idx += 1
+
+        # Write program data across clusters
+        for i in range(num_clusters):
+            cluster = first_prog_cluster + i
+            cl_off = cluster_to_offset(cluster)
+            chunk_start = i * CLUSTER_SIZE
+            chunk_end = min(chunk_start + CLUSTER_SIZE, prog_size)
+            chunk = prog_data[chunk_start:chunk_end]
+            disk[cl_off:cl_off + len(chunk)] = chunk
+
+        next_free_cluster += num_clusters
+        print(f"  PROG.ELF → clusters {first_prog_cluster}-{first_prog_cluster + num_clusters - 1}")
+    else:
+        print("\nNo ELF program provided (skipping PROG.ELF)")
 
     # End-of-directory marker
-    disk[root_offset + 64] = 0x00
+    disk[root_offset + dir_entry_idx * 32] = 0x00
 
-    # ===== File data =====
-    # Cluster 3: hello.txt
-    cl3_off = (data_start + (3 - 2) * SECTORS_PER_CLUSTER) * BYTES_PER_SECTOR
-    disk[cl3_off:cl3_off + hello_size] = hello_data
+    # ===== Write FAT tables (2 copies) =====
+    for i in range(NUM_FATS):
+        offset = (fat_start + i * fat_size) * BYTES_PER_SECTOR
+        disk[offset:offset + len(fat)] = fat
 
-    # Cluster 4: test.txt
-    cl4_off = (data_start + (4 - 2) * SECTORS_PER_CLUSTER) * BYTES_PER_SECTOR
-    disk[cl4_off:cl4_off + test_size] = test_data
-
-    # Write
+    # Write disk image
     os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
     with open(path, 'wb') as f:
         f.write(disk)
 
     print(f"\nCreated: {path} ({DISK_SIZE_MB}MB)")
-    print(f"Files: hello.txt ({hello_size}B), test.txt ({test_size}B)")
+    print(f"Files: hello.txt ({len(hello_data)}B), test.txt ({len(test_data)}B), prog.elf ({prog_size}B)")
     print(f"Root dir: sector {root_dir_sector} (cluster 2)")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <output_path>")
+        print(f"Usage: {sys.argv[0]} <output_path> [prog.elf]")
         sys.exit(1)
-    create_disk(sys.argv[1])
+    prog = sys.argv[2] if len(sys.argv) >= 3 else None
+    create_disk(sys.argv[1], prog)

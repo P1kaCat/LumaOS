@@ -508,6 +508,23 @@ void syscall_handler(struct registers *regs) {
             break;
         }
 
+        case 12: { /* exec(path) — RDI = user path pointer → load & run flat binary */
+            uint64_t path_user = regs->rdi;
+            if (!validate_user_ptr(path_user, 1, 0)) {
+                regs->rax = (uint64_t)(int64_t)-1;
+                break;
+            }
+            char kpath[64];
+            int plen = copy_str_from_user(kpath, path_user, sizeof(kpath));
+            if (plen < 0) {
+                regs->rax = (uint64_t)(int64_t)-1;
+                break;
+            }
+            int pid = spawn_file(kpath);
+            regs->rax = (uint64_t)(int64_t)pid;
+            break;
+        }
+
         default:
             regs->rax = (uint64_t)-1;  /* error: unknown syscall */
             break;

@@ -130,6 +130,11 @@ shell_code_start:
     testq %rax, %rax
     jnz .do_cat
 
+    leaq cmd_run(%rip), %rsi
+    call starts_with
+    testq %rax, %rax
+    jnz .do_run
+
     leaq msg_unknown(%rip), %rdi
     xorq %rax, %rax
     movq $17, %rsi
@@ -141,7 +146,7 @@ shell_code_start:
 .do_help:
     leaq msg_help_text(%rip), %rdi
     xorq %rax, %rax
-    movq $166, %rsi
+    movq $197, %rsi
     int $0x80
     jmp .shell_loop
 
@@ -260,6 +265,29 @@ shell_code_start:
     leaq msg_cat_err_read(%rip), %rdi
     xorq %rax, %rax
     movq $11, %rsi
+    int $0x80
+    jmp .shell_loop
+
+    /* ---- run FILE command ---- */
+    /* starts_with returned prefix length (4 = "run ") in RAX */
+.do_run:
+    /* exec(path) — load & run flat binary from filesystem */
+    movq $12, %rax               /* syscall 12 = exec(path) */
+    leaq cmd_buf+4(%rip), %rdi   /* path = cmd_buf+4 (after "run ") */
+    int $0x80
+    cmpq $0, %rax
+    jl .run_fail
+
+    leaq msg_run_ok(%rip), %rdi
+    xorq %rax, %rax
+    movq $15, %rsi
+    int $0x80
+    jmp .shell_loop
+
+.run_fail:
+    leaq msg_run_fail(%rip), %rdi
+    xorq %rax, %rax
+    movq $12, %rsi
     int $0x80
     jmp .shell_loop
 
@@ -392,7 +420,7 @@ msg_prompt:
 msg_unknown:
     .asciz "Unknown command\n"
 msg_help_text:
-    .asciz "Commands:\n  help    - Show this help\n  pid     - Print PID\n  mem     - Show free pages\n  sleep N - Sleep N ticks (50Hz)\n  cat FILE- Print file\n  exit    - Exit shell\n"
+    .asciz "Commands:\n  help    - Show this help\n  pid     - Print PID\n  mem     - Show free pages\n  sleep N - Sleep N ticks (50Hz)\n  cat FILE- Print file\n  run FILE- Load & run program\n  exit    - Exit shell\n"
 msg_pid_prefix:
     .asciz "PID: "
 msg_mem_prefix:
@@ -405,6 +433,10 @@ msg_cat_err_notfound:
     .asciz "File not found\n"
 msg_cat_err_read:
     .asciz "Read error\n"
+msg_run_ok:
+    .asciz "Program loaded\n"
+msg_run_fail:
+    .asciz "Load failed\n"
 nl_str:
     .asciz "\n"
 bs_seq:
@@ -422,5 +454,7 @@ cmd_sleep:
     .asciz "sleep "
 cmd_cat:
     .asciz "cat "
+cmd_run:
+    .asciz "run "
 
 shell_code_end:

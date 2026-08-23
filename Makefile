@@ -1,9 +1,10 @@
 # Makefile — LumaOS Root Build
 #
 # Usage :
-#   make build    — Compile le kernel + bootloader + prépare l'image
+#   make build    — Compile le kernel + bootloader + user programs + disk image
 #   make run      — Build + lance QEMU avec OVMF + disk image
 #   make debug    — Build + QEMU avec gdbstub (freeze au boot, port 1234)
+#   make userprogs — Build standalone ELF64 user programs
 #   make disk     — Create FAT32 disk image (Phase 6)
 #   make clean    — Nettoie tout
 #
@@ -20,14 +21,20 @@ EFI_ROOT  := $(BUILD_DIR)/efi_root
 DISK_IMG  := $(BUILD_DIR)/disk.img
 
 # --- Toolchain ---
-QEMU := qemu-system-x86_64
-PYTHON := python3
+CC      := clang
+LD      := ld.lld
+PYTHON  := python3
+QEMU    := qemu-system-x86_64
 
-# --- Binaires ---
+# --- User programs ---
+USERPROG_DIR  := userprogs
+USERPROG_ELF  := $(BUILD_DIR)/userprogs/hello.elf
+
+# --- Binaries ---
 EFI_BIN    := $(BUILD_DIR)/boot/BOOTX64.EFI
 KERNEL_BIN := $(BUILD_DIR)/kernel/kernel.elf
 
-.PHONY: all build run debug clean kernel bootloader image disk
+.PHONY: all build run debug clean kernel bootloader image disk userprogs
 
 all: build
 
@@ -42,6 +49,16 @@ bootloader:
 	@echo "=== Building Bootloader ==="
 	$(MAKE) -C boot/efi
 
+# userprogs : build standalone ELF64 user programs
+userprogs: $(USERPROG_ELF)
+
+$(USERPROG_ELF): $(USERPROG_DIR)/hello.S $(USERPROG_DIR)/userprog.ld
+	@echo "=== Building user program (ELF64) ==="
+	@mkdir -p $(BUILD_DIR)/userprogs
+	$(CC) --target=x86_64-unknown-none -ffreestanding -nostdlib -c $(USERPROG_DIR)/hello.S -o $(BUILD_DIR)/userprogs/hello.o
+	$(LD) -T $(USERPROG_DIR)/userprog.ld -nostdlib --oformat elf64-x86-64 -o $@ $(BUILD_DIR)/userprogs/hello.o
+	@echo "  hello.elf → $@"
+
 # image : copier BOOTX64.EFI + kernel.elf dans le FAT root pour QEMU
 image: kernel bootloader
 	@mkdir -p $(EFI_ROOT)/EFI/BOOT
@@ -51,10 +68,10 @@ image: kernel bootloader
 	@echo "  BOOTX64.EFI → $(EFI_ROOT)/EFI/BOOT/BOOTX64.EFI"
 	@echo "  kernel.elf  → $(EFI_ROOT)/kernel.elf"
 
-# disk : create FAT32 disk image for Phase 6 filesystem
-disk:
+# disk : create FAT32 disk image with user programs (Phase 6)
+disk: userprogs
 	@echo "=== Creating FAT32 disk image ==="
-	$(PYTHON) tools/create_disk.py $(DISK_IMG)
+	$(PYTHON) tools/create_disk.py $(DISK_IMG) $(USERPROG_ELF)
 
 # run : build + QEMU avec OVMF + data disk
 run: build
