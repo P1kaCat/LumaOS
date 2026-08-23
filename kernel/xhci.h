@@ -1,12 +1,7 @@
-/* xhci.h — xHCI USB Host Controller Driver (Phase 7b.1)
+/* xhci.h — xHCI USB Host Controller Driver
  *
- * xHCI (eXtensible Host Controller Interface) for USB 3.0/2.0.
- * Discovered via PCI class 0C/03/30 (Serial bus / USB / xHCI).
- * Registers accessed via MMIO (BAR0).
- *
- * Phase 7b.1: Controller discovery + capability register reading.
- * Future phases: controller reset, command/event rings, device enumeration,
- * USB HID keyboard/mouse support.
+ * Phase 7b.1: controller discovery and capability reading.
+ * Phase 7b.2: controller reset and command/event ring setup.
  */
 #ifndef LUMAOS_XHCI_H
 #define LUMAOS_XHCI_H
@@ -14,58 +9,87 @@
 #include <stdint.h>
 #include "pci.h"
 
-/* ===== xHCI Capability Registers (read-only, at BAR0 base) ===== */
-#define XHCI_CAPLENGTH    0x00  /* 8-bit: length of capability regs */
-#define XHCI_HCIVERSION   0x02  /* 16-bit: interface version (BCD) */
-#define XHCI_HCSPARAMS1   0x04  /* 32-bit: structural parameters 1 */
-#define XHCI_HCSPARAMS2   0x08  /* 32-bit: structural parameters 2 */
-#define XHCI_HCSPARAMS3   0x0C  /* 32-bit: structural parameters 3 */
-#define XHCI_HCCPARAMS1   0x10  /* 32-bit: capability parameters 1 */
-#define XHCI_DBOFF        0x14  /* 32-bit: doorbell offset */
-#define XHCI_RTSOFF       0x18  /* 32-bit: runtime register space offset */
+/* ===== xHCI Capability Registers ===== */
+#define XHCI_CAPLENGTH    0x00
+#define XHCI_HCIVERSION   0x02
+#define XHCI_HCSPARAMS1   0x04
+#define XHCI_HCSPARAMS2   0x08
+#define XHCI_HCSPARAMS3   0x0C
+#define XHCI_HCCPARAMS1   0x10
+#define XHCI_DBOFF        0x14
+#define XHCI_RTSOFF       0x18
 
-/* HCSPARAMS1 fields */
-#define XHCI_HCS1_MAX_SLOTS     0xFF000000  /* bits 24-31 */
-#define XHCI_HCS1_MAX_INTRS     0x00FF0000  /* bits 16-23 */
-#define XHCI_HCS1_MAX_PORTS     0x00000FFF  /* bits 0-11 */
+#define XHCI_HCS1_MAX_SLOTS     0xFF000000
+#define XHCI_HCS1_MAX_INTRS     0x00FF0000
+#define XHCI_HCS1_MAX_PORTS     0x00000FFF
 
-/* HCCPARAMS1 fields */
-#define XHCI_HCC1_AC64          (1 << 0)    /* 64-bit addressing */
-#define XHCI_HCC1_BNC           (1 << 1)    /* BW negotiation */
-#define XHCI_HCC1_CSZ           (1 << 2)    /* 64-byte context size */
-#define XHCI_HCC1_PPC           (1 << 3)    /* port power control */
-#define XHCI_HCC1_PIND          (1 << 4)    /* port indicators */
-#define XHCI_HCC1_LHRC          (1 << 5)    /* light HC reset */
-#define XHCI_HCC1_LTC           (1 << 6)    /* latency tolerance msg */
-#define XHCI_HCC1_NSS           (1 << 7)    /* no secondary SID */
-#define XHCI_HCC1_SEC_SID(x)   (((x) >> 24) & 0xFF)
-#define XHCI_HCC1_PSI(x)       (((x) >> 28) & 0x0F)
+#define XHCI_HCC1_AC64          (1u << 0)
+#define XHCI_HCC1_BNC           (1u << 1)
+#define XHCI_HCC1_CSZ           (1u << 2)
+#define XHCI_HCC1_PPC           (1u << 3)
+#define XHCI_HCC1_PIND          (1u << 4)
+#define XHCI_HCC1_LHRC          (1u << 5)
+#define XHCI_HCC1_LTC           (1u << 6)
+#define XHCI_HCC1_NSS           (1u << 7)
 
-/* ===== xHCI Operational Registers (at BAR0 + CAPLENGTH) ===== */
-#define XHCI_USBCMD        0x00  /* 32-bit: USB command */
-#define XHCI_USBSTS        0x04  /* 32-bit: USB status */
-#define XHCI_PAGESIZE      0x08  /* 32-bit: page size */
-#define XHCI_DNCTRL       0x14  /* 32-bit: device notification control */
-#define XHCI_CRCR_LOW     0x18  /* 64-bit: command ring control */
-#define XHCI_DCBAAP_LOW   0x30  /* 64-bit: dev context base addr array ptr */
-#define XHCI_CONFIG       0x38  /* 32-bit: configure */
+/* ===== xHCI Operational Registers ===== */
+#define XHCI_USBCMD        0x00
+#define XHCI_USBSTS        0x04
+#define XHCI_PAGESIZE      0x08
+#define XHCI_DNCTRL        0x14
+#define XHCI_CRCR_LOW      0x18
+#define XHCI_CRCR_HIGH     0x1C
+#define XHCI_DCBAAP_LOW    0x30
+#define XHCI_DCBAAP_HIGH   0x34
+#define XHCI_CONFIG        0x38
 
-/* USBCMD bits */
-#define XHCI_USBCMD_RUN    (1 << 0)
-#define XHCI_USBCMD_RESET  (1 << 1)
+#define XHCI_USBCMD_RUN    (1u << 0)
+#define XHCI_USBCMD_RESET  (1u << 1)
 
-/* USBSTS bits */
-#define XHCI_USBSTS_HCH    (1 << 0)  /* HC halted */
-#define XHCI_USBSTS_PCD    (1 << 4)  /* port change detect */
-#define XHCI_USBSTS_CNR    (1 << 11) /* controller not ready */
+#define XHCI_USBSTS_HCH    (1u << 0)
+#define XHCI_USBSTS_PCD    (1u << 4)
+#define XHCI_USBSTS_CNR    (1u << 11)
+#define XHCI_USBSTS_HCE    (1u << 12)
 
-/* ===== API ===== */
+/* ===== Runtime register space ===== */
+#define XHCI_RT_INTR_BASE      0x20
+#define XHCI_RT_INTR_STRIDE    0x20
+#define XHCI_IMAN              0x00
+#define XHCI_IMOD              0x04
+#define XHCI_ERSTSZ            0x08
+#define XHCI_ERSTBA_LOW        0x10
+#define XHCI_ERSTBA_HIGH       0x14
+#define XHCI_ERDP_LOW          0x18
+#define XHCI_ERDP_HIGH         0x1C
+#define XHCI_IMAN_IE           (1u << 1)
+#define XHCI_IMAN_IP           (1u << 0)
+#define XHCI_ERDP_EHB          (1u << 3)
 
-/* Discover and initialize the xHCI host controller.
- * Finds the xHCI PCI device, enables it, reads BAR0,
- * and reads capability registers.
- * Called after pci_init() and apic_init().
- */
+/* ===== Doorbell registers ===== */
+#define XHCI_DOORBELL_COMMAND  0
+
+/* ===== TRB definitions ===== */
+#define XHCI_TRB_TYPE_SHIFT    10
+#define XHCI_TRB_TYPE_MASK     (0x3Fu << XHCI_TRB_TYPE_SHIFT)
+#define XHCI_TRB_CYCLE         (1u << 0)
+#define XHCI_TRB_TC             (1u << 1) /* Link TRB: toggle cycle */
+#define XHCI_TRB_TYPE_LINK     6
+
+struct xhci_trb {
+    uint32_t parameter_lo;
+    uint32_t parameter_hi;
+    uint32_t status;
+    uint32_t control;
+};
+
+struct xhci_erst_entry {
+    uint32_t ring_seg_base_lo;
+    uint32_t ring_seg_base_hi;
+    uint32_t ring_seg_size;
+    uint32_t reserved;
+};
+
+/* Discover, reset and initialize the xHCI host controller. */
 void xhci_init(void);
 
 #endif /* LUMAOS_XHCI_H */
