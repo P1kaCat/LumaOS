@@ -1,4 +1,4 @@
-/* shell_code.S — LumaOS Shell v0.1 (Phase 5)
+/* shell_code.S — LumaOS Shell v0.2 (Phase 5/6)
  *
  * Interactive shell — spawned by init (PID 2).
  * Built-in commands:
@@ -6,10 +6,12 @@
  *   pid      - Print current PID
  *   mem      - Show free page count
  *   sleep N  - Sleep N ticks (50Hz → 20ms each)
+ *   cat FILE - Print file content (via syscalls 8/9/10/0)
  *   exit     - Exit shell
  *
  * Syscalls: write(0), exit(1), getpid(2), sbrk(3),
- *           read(4), sleep(5), yield(6), getpages(7)
+ *           read(4), sleep(5), yield(6), getpages(7),
+ *           open(8), close(9), read_file(10)
  */
 .text
 .global shell_code_start
@@ -123,6 +125,11 @@ shell_code_start:
     testq %rax, %rax
     jnz .do_sleep
 
+    leaq cmd_cat(%rip), %rsi
+    call starts_with
+    testq %rax, %rax
+    jnz .do_cat
+
     leaq msg_unknown(%rip), %rdi
     xorq %rax, %rax
     movq $17, %rsi
@@ -134,7 +141,7 @@ shell_code_start:
 .do_help:
     leaq msg_help_text(%rip), %rdi
     xorq %rax, %rax
-    movq $120, %rsi
+    movq $166, %rsi
     int $0x80
     jmp .shell_loop
 
@@ -198,6 +205,61 @@ shell_code_start:
     leaq msg_done(%rip), %rdi
     xorq %rax, %rax
     movq $5, %rsi
+    int $0x80
+    jmp .shell_loop
+
+    /* ---- cat FILE command ---- */
+    /* starts_with returned prefix length (4 = "cat ") in RAX */
+.do_cat:
+    /* Open the file: path = cmd_buf+4 */
+    movq $8, %rax               /* open(path) */
+    leaq cmd_buf+4(%rip), %rdi
+    int $0x80
+    cmpq $0, %rax
+    jl .cat_err_notfound
+    movq %rax, %r13             /* save fd */
+
+.cat_read_loop:
+    /* Read from file into cat_buf */
+    movq $10, %rax              /* read(fd, buf, 255) */
+    movq %r13, %rdi
+    leaq cat_buf(%rip), %rsi
+    movq $255, %rdx
+    int $0x80
+    cmpq $0, %rax
+    jl .cat_err_read
+    je .cat_close               /* EOF */
+
+    /* Write read data to serial */
+    movq %rax, %r14             /* save byte count */
+    xorq %rax, %rax             /* write(1, buf, n) */
+    leaq cat_buf(%rip), %rdi
+    movq %r14, %rsi
+    int $0x80
+    jmp .cat_read_loop
+
+.cat_close:
+    /* Close file */
+    movq $9, %rax               /* close(fd) */
+    movq %r13, %rdi
+    int $0x80
+    jmp .shell_loop
+
+.cat_err_notfound:
+    leaq msg_cat_err_notfound(%rip), %rdi
+    xorq %rax, %rax
+    movq $15, %rsi
+    int $0x80
+    jmp .shell_loop
+
+.cat_err_read:
+    /* Close fd then print error */
+    movq $9, %rax
+    movq %r13, %rdi
+    int $0x80
+    leaq msg_cat_err_read(%rip), %rdi
+    xorq %rax, %rax
+    movq $11, %rsi
     int $0x80
     jmp .shell_loop
 
@@ -318,6 +380,8 @@ char_buf:
     .byte 0
 itoa_buf:
     .skip 24
+cat_buf:
+    .skip 256
 
 msg_welcome:
     .asciz "LumaOS Shell v0.1\n"
@@ -328,7 +392,7 @@ msg_prompt:
 msg_unknown:
     .asciz "Unknown command\n"
 msg_help_text:
-    .asciz "Commands:\n  help    - Show this help\n  pid     - Print PID\n  mem     - Show free pages\n  sleep N - Sleep N ticks (50Hz)\n  exit    - Exit shell\n"
+    .asciz "Commands:\n  help    - Show this help\n  pid     - Print PID\n  mem     - Show free pages\n  sleep N - Sleep N ticks (50Hz)\n  cat FILE- Print file\n  exit    - Exit shell\n"
 msg_pid_prefix:
     .asciz "PID: "
 msg_mem_prefix:
@@ -337,6 +401,10 @@ msg_sleeping:
     .asciz "Sleeping...\n"
 msg_done:
     .asciz "Done\n"
+msg_cat_err_notfound:
+    .asciz "File not found\n"
+msg_cat_err_read:
+    .asciz "Read error\n"
 nl_str:
     .asciz "\n"
 bs_seq:
@@ -352,5 +420,7 @@ cmd_exit:
     .asciz "exit"
 cmd_sleep:
     .asciz "sleep "
+cmd_cat:
+    .asciz "cat "
 
 shell_code_end:

@@ -1,11 +1,12 @@
-/* init_code.S — LumaOS init process (Phase 5)
+/* init_code.S — LumaOS init process (Phase 5/6)
  *
  * Init is the first user process (PID 1), launched directly by the kernel.
  * Responsibilities:
- *   1. Run the Phase 6 filesystem syscall regression test
- *   2. Spawn the shell process (PID 2) via syscall 11
- *   3. Print [INIT5] test passed marker for CI
- *   4. Exit
+ *   1. Run the Phase 6 filesystem syscall regression test ([SYSCALL6])
+ *   2. Run the Phase 6 cat test — read+print hello.txt ([CAT6])
+ *   3. Spawn the shell process (PID 2) via syscall 11
+ *   4. Print [INIT5] test passed marker for CI
+ *   5. Exit
  *
  * Syscalls: write(0), exit(1), open(8), close(9), read(10), spawn(11)
  */
@@ -218,6 +219,68 @@ init_code_start:
     movq $1, %rsi
     int $0x80
 
+    /* ---- Phase 6: Cat test ----
+     * Reads hello.txt in a loop and prints content, mimicking cat.
+     * Marker: "[CAT6] test passed" for CI.
+     */
+    xorq %r12, %r12          /* R12 = 0 (all passed) */
+
+    movq $8, %rax            /* open("hello.txt") */
+    leaq path_hello(%rip), %rdi
+    int $0x80
+    cmpq $0, %rax
+    jl .cat_fail
+    movq %rax, %r13          /* save fd */
+
+.cat_read_loop:
+    movq $10, %rax           /* read(fd, buf, 255) */
+    movq %r13, %rdi
+    leaq test_buf(%rip), %rsi
+    movq $255, %rdx
+    int $0x80
+    cmpq $0, %rax
+    jl .cat_fail_read
+    je .cat_eof              /* EOF */
+
+    /* Write read data to serial */
+    movq %rax, %r14          /* save byte count */
+    xorq %rax, %rax          /* write(1, buf, n) */
+    leaq test_buf(%rip), %rdi
+    movq %r14, %rsi
+    int $0x80
+    jmp .cat_read_loop
+
+.cat_eof:
+    /* Close file */
+    movq $9, %rax
+    movq %r13, %rdi
+    int $0x80
+    /* Print [CAT6] test passed */
+    leaq msg_cat6_pass(%rip), %rdi
+    xorq %rax, %rax
+    movq $19, %rsi
+    int $0x80
+    jmp .cat_done
+
+.cat_fail_read:
+    /* Close fd */
+    movq $9, %rax
+    movq %r13, %rdi
+    int $0x80
+
+.cat_fail:
+    movq $1, %r12
+    leaq msg_cat6_fail(%rip), %rdi
+    xorq %rax, %rax
+    movq $19, %rsi
+    int $0x80
+
+.cat_done:
+    leaq nl_str(%rip), %rdi
+    xorq %rax, %rax
+    movq $1, %rsi
+    int $0x80
+
     /* ---- Spawn shell process (PID 2) ---- */
     movq $11, %rax            /* spawn(prog_id) */
     xorq %rdi, %rdi           /* prog_id = 0 (shell) */
@@ -282,6 +345,11 @@ path_nonexist:
     .asciz "nonexist.txt"
 test_buf:
     .skip 256
+
+msg_cat6_pass:
+    .asciz "[CAT6] test passed\n"
+msg_cat6_fail:
+    .asciz "[CAT6] test FAILED\n"
 
 msg_init5_pass:
     .asciz "[INIT5] test passed\n"
