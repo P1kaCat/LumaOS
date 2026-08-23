@@ -13,7 +13,7 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (13 markers):
+- [x] Boot marker verification (14 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
@@ -262,6 +262,15 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Unmask timer (IRQ0 → GSI 2 via override) and keyboard (IRQ1 → GSI 1)
 - [x] LAPIC EOI replaces PIC EOI in irq_default_handler
 - [x] `[APIC7a3] LAPIC + IOAPIC enabled` CI marker
+
+### PCI Interrupt Routing — ✅ Done (Phase 7a.4)
+- [x] Read PIIX3 PIRQ routing registers (0x60-0x63)
+- [x] Map PCI devices → INT pin → PIRQ → GSI 16-19 → I/O APIC
+- [x] Add IDT entries for vectors 48-51 (PCI GSIs 16-19)
+- [x] Configure I/O APIC redirection entries (active-low, level-triggered)
+- [x] All PCI IRQs masked (no device drivers yet — will be unmasked per-driver)
+- [x] Print full routing table (slot, pin, PIRQ, GSI, vector, ISA IRQ)
+- [x] `[PCI7a4] IRQ routing OK` CI marker
 
 ### Next drivers — ⬜ Planned
 - [ ] USB

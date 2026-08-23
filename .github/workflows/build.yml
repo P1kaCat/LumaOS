@@ -215,7 +215,8 @@ jobs:
             "[EXEC12] test passed" \
             "[PCI7] devices:" \
             "[ACPI7a2] tables parsed" \
-            "[APIC7a3] LAPIC + IOAPIC enabled"
+            "[APIC7a3] LAPIC + IOAPIC enabled" \
+            "[PCI7a4] IRQ routing OK"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"

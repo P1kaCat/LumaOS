@@ -191,6 +191,7 @@ extern void irq6(void);  extern void irq7(void);  extern void irq8(void);
 extern void irq9(void);  extern void irq10(void); extern void irq11(void);
 extern void irq12(void); extern void irq13(void); extern void irq14(void);
 extern void irq15(void);
+extern void irq16(void);  extern void irq17(void);  extern void irq18(void);  extern void irq19(void);
 extern void isr128(void);
 
 static void idt_set_entry(int i, void *handler, uint8_t flags) {
@@ -221,9 +222,15 @@ void idt_init(void) {
     };
     for (int i = 0; i < 16; i++)
         idt_set_entry(32 + i, irq_stubs[i], 0x8E);
+
+    /* Phase 7a.4: PCI IRQ vectors 48-51 (PIIX3 PIRQA-D → GSI 16-19) */
+    void (*pci_irq_stubs[4])(void) = { irq16, irq17, irq18, irq19 };
+    for (int i = 0; i < 4; i++)
+        idt_set_entry(48 + i, pci_irq_stubs[i], 0x8E);
+
     idt_set_entry(128, isr128, 0xEE);
     __asm__ volatile ("lidt %0" : : "m"(idtr));
-    serial_puts("[+] IDT loaded (256 entries + syscall gate @128 DPL=3)\n");
+    serial_puts("[+] IDT loaded (256 entries, IRQs 0-15 + PCI 16-19, syscall @128)\n");
 }
 
 /* ===== PIC ===== */

@@ -198,6 +198,9 @@ void kernel_main(struct lumaos_handoff *ho) {
 
     /* ---- Phase 7a.3: Local APIC + I/O APIC ---- */
     apic_init();
+
+    /* ---- Phase 7a.4: PCI Interrupt Routing ---- */
+    pci_irq_init();
     /* ---- Phase 6: ATA/IDE disk driver ---- */
     serial_puts("\n[*] Initializing ATA/IDE driver...\n");
     if (ata_init() != 0) {

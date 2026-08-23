@@ -80,6 +80,14 @@ IRQ_ENTRY 13, 45
 IRQ_ENTRY 14, 46
 IRQ_ENTRY 15, 47
 
+/* PCI IRQ 16-19 (vectors 48-51) — Phase 7a.4
+ * QEMU i440FX: PIIX3 PIRQA-PIRQD → I/O APIC GSI 16-19
+ */
+IRQ_ENTRY 16, 48
+IRQ_ENTRY 17, 49
+IRQ_ENTRY 18, 50
+IRQ_ENTRY 19, 51
+
 /* Syscall gate (int 0x80) */
 .global isr128
 isr128:

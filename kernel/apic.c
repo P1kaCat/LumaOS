@@ -119,6 +119,27 @@ uint32_t isa_irq_to_gsi(uint8_t isa_irq) {
     return isa_irq;
 }
 
+/* ===== Generic I/O APIC routing (public API) ===== */
+
+void apic_route_irq(uint8_t gsi, uint8_t vector, uint8_t dest_apic_id,
+                     int polarity_low, int trigger_level, int mask) {
+    /* Low 32 bits: vector | delivery=Fixed | dest=Physical
+     *              | polarity | trigger mode | mask */
+    uint32_t low = (uint32_t)vector
+                 | IOAPIC_REDIR_DELIVERY_FIXED
+                 | IOAPIC_REDIR_DEST_PHYSICAL
+                 | (polarity_low  ? IOAPIC_REDIR_POLARITY_LOW  : IOAPIC_REDIR_POLARITY_HIGH)
+                 | (trigger_level ? IOAPIC_REDIR_TRIGGER_LEVEL : IOAPIC_REDIR_TRIGGER_EDGE)
+                 | (mask ? IOAPIC_REDIR_MASKED : IOAPIC_REDIR_UNMASKED);
+
+    /* High 32 bits: destination APIC ID in bits 24-31 */
+    uint32_t high = ((uint32_t)dest_apic_id) << 24;
+
+    uint8_t reg = (uint8_t)(IOAPIC_REG_REDTBL + gsi * 2);
+    ioapic_write(reg, low);
+    ioapic_write((uint8_t)(reg + 1), high);
+}
+
 /* ===== I/O APIC configuration ===== */
 
 static int ioapic_max_redir(void) {

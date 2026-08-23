@@ -82,4 +82,34 @@ struct pci_device *pci_find_class(uint8_t base_class, uint8_t subclass, uint8_t 
 /* Get number of detected PCI devices. */
 int pci_device_count(void);
 
+/* ===== Phase 7a.4: PCI Interrupt Routing ===== */
+
+/* PIIX3 PIRQ routing registers (config offset 0x60-0x63)
+ * Each maps a PIRQ pin (A-D) to an ISA IRQ (0-15) or 0x80=disabled.
+ * Read from the ISA bridge at bus 0, device 1, function 0.
+ */
+#define PIIX3_PIRQA_OFFSET  0x60
+#define PIIX3_PIRQB_OFFSET  0x61
+#define PIIX3_PIRQC_OFFSET  0x62
+#define PIIX3_PIRQD_OFFSET  0x63
+
+/* INT pin names */
+#define PCI_INTA  1
+#define PCI_INTB  2
+#define PCI_INTC  3
+#define PCI_INTD  4
+
+/* Calculate PIRQ index (0=A, 1=B, 2=C, 3=D) from slot and INT pin.
+ * Standard PCI swizzle: PIRQ = (slot + pin - 1) % 4 */
+static inline int pci_pirq_index(uint8_t slot, uint8_t pin) {
+    return (int)((slot + pin - 1) % 4);
+}
+
+/* Initialize PCI interrupt routing through the I/O APIC.
+ * Must be called after pci_init() and apic_init().
+ * Reads PIIX3 PIRQ registers, maps PCI devices → PIRQ → GSI → vector,
+ * and configures I/O APIC redirection entries (masked, since no
+ * PCI device drivers yet). */
+void pci_irq_init(void);
+
 #endif /* LUMAOS_PCI_H */

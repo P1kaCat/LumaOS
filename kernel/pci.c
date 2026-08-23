@@ -23,7 +23,9 @@
  * All loops are bounded — no infinite loop possible.
  */
 #include "pci.h"
-#include "cpu.h"  /* serial_puts, inb/outb, inl/outl */
+#include "cpu.h"
+#include "apic.h"
+#include "acpi.h"  /* serial_puts, inb/outb, inl/outl */
 
 /* ===== Device table ===== */
 static struct pci_device pci_devices[PCI_MAX_DEVICES];
@@ -240,4 +242,114 @@ struct pci_device *pci_find_class(uint8_t base_class, uint8_t subclass, uint8_t 
 
 int pci_device_count(void) {
     return pci_num_devices;
+}
+
+/* ===== Phase 7a.4: PCI Interrupt Routing ===== */
+
+/* PIIX3 ISA bridge: bus 0, device 1, function 0 */
+#define PIIX3_BUS   0
+#define PIIX3_DEV   1
+#define PIIX3_FUNC  0
+
+static const char *pirq_name(int idx) {
+    static const char names[4] = {'A', 'B', 'C', 'D'};
+    if (idx >= 0 && idx < 4) return &names[idx];
+    return "?";
+}
+
+/* Print a single char via serial_puts */
+static void serial_putc2(char c) {
+    char s[2]; s[0] = c; s[1] = 0;
+    serial_puts(s);
+}
+
+void pci_irq_init(void) {
+    char buf[16];
+
+    serial_puts("\n[*] Configuring PCI interrupt routing...\n");
+
+    /* --- 1. Read PIIX3 PIRQ routing registers --- */
+    uint8_t pirq_regs[4];
+    pirq_regs[0] = pci_config_read8(PIIX3_BUS, PIIX3_DEV, PIIX3_FUNC, PIIX3_PIRQA_OFFSET);
+    pirq_regs[1] = pci_config_read8(PIIX3_BUS, PIIX3_DEV, PIIX3_FUNC, PIIX3_PIRQB_OFFSET);
+    pirq_regs[2] = pci_config_read8(PIIX3_BUS, PIIX3_DEV, PIIX3_FUNC, PIIX3_PIRQC_OFFSET);
+    pirq_regs[3] = pci_config_read8(PIIX3_BUS, PIIX3_DEV, PIIX3_FUNC, PIIX3_PIRQD_OFFSET);
+
+    serial_puts("  PIIX3 PIRQ routing:\n");
+    for (int i = 0; i < 4; i++) {
+        uint8_t r = pirq_regs[i];
+        serial_puts("    PIRQ");
+        serial_putc2(pirq_name(i)[0]);
+        if (r & 0x80) {
+            serial_puts(" = disabled\n");
+        } else {
+            serial_puts(" -> ISA IRQ ");
+            serial_puts(uitoa(r & 0x0F, buf));
+            serial_puts("\n");
+        }
+    }
+
+    /* --- 2. Get destination LAPIC ID --- */
+    uint8_t dest_apic_id = lapic_get_id();
+    if (g_acpi_lapic_found)
+        dest_apic_id = g_acpi_lapic_apic_id;
+
+    /* --- 3. Configure I/O APIC for PCI GSI 16-19 ---
+     * On QEMU i440FX, PIIX3 PIRQA-PIRQD are connected to I/O APIC
+     * pins 16-19. PCI interrupts are active-low, level-triggered
+     * (unlike ISA which is active-high, edge-triggered).
+     *
+     * All entries are masked — no PCI device drivers yet.
+     * Future drivers will unmask their GSI when registering a handler.
+     */
+    for (int pirq = 0; pirq < PCI_NUM_PIRQ; pirq++) {
+        uint8_t gsi = (uint8_t)(PCI_GSI_BASE + pirq);
+        uint8_t vector = (uint8_t)(PCI_IRQ_VECTOR_BASE + pirq);
+
+        /* PCI interrupts: active-low, level-triggered, masked */
+        apic_route_irq(gsi, vector, dest_apic_id, 1, 1, 1 /* masked */);
+    }
+
+    serial_puts("  [+] I/O APIC GSI 16-19 configured (PCI, active-low, level)\n");
+
+    /* --- 4. Map each PCI device to its PIRQ/GSI/vector --- */
+    serial_puts("  PCI interrupt routing table:\n");
+
+    int num_routed = 0;
+    for (int i = 0; i < pci_num_devices; i++) {
+        struct pci_device *d = &pci_devices[i];
+        if (d->irq_pin == 0) continue;  /* no interrupt pin */
+
+        /* Calculate PIRQ index from slot and pin */
+        int pirq_idx = pci_pirq_index(d->device, d->irq_pin);
+        uint8_t gsi = (uint8_t)(PCI_GSI_BASE + pirq_idx);
+        uint8_t vector = (uint8_t)(PCI_IRQ_VECTOR_BASE + pirq_idx);
+        uint8_t isa_irq_from_pirq = pirq_regs[pirq_idx] & 0x0F;
+
+        serial_puts("    ");
+        serial_puts(uxtoa_pad(d->bus, buf, 2)); serial_puts(":");
+        serial_puts(uxtoa_pad(d->device, buf, 2)); serial_puts(".");
+        serial_puts(uitoa(d->func, buf));
+        serial_puts(" INT");
+        serial_putc2(pirq_name(pirq_idx)[0]);
+        serial_puts(" -> PIRQ");
+        serial_putc2(pirq_name(pirq_idx)[0]);
+        serial_puts(" -> GSI ");
+        serial_puts(uitoa(gsi, buf));
+        serial_puts(" -> vec ");
+        serial_puts(uitoa(vector, buf));
+        serial_puts(" (line=");
+        serial_puts(uitoa(d->irq_line, buf));
+        serial_puts(", PIRQ->ISA ");
+        serial_puts(uitoa(isa_irq_from_pirq, buf));
+        serial_puts(")\n");
+
+        num_routed++;
+    }
+
+    serial_puts("  [+] ");
+    serial_puts(uitoa(num_routed, buf));
+    serial_puts(" PCI devices routed\n");
+
+    serial_puts("[PCI7a4] IRQ routing OK\n");
 }

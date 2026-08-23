@@ -53,9 +53,20 @@
 #define IOAPIC_REDIR_DELIVERY_FIXED (0 << 8)
 #define IOAPIC_REDIR_DEST_PHYSICAL  (0 << 11)
 #define IOAPIC_REDIR_POLARITY_HIGH  (0 << 13)
+#define IOAPIC_REDIR_POLARITY_LOW   (1 << 13)
 #define IOAPIC_REDIR_TRIGGER_EDGE   (0 << 15)
+#define IOAPIC_REDIR_TRIGGER_LEVEL  (1 << 15)
 #define IOAPIC_REDIR_MASKED         (1 << 16)
 #define IOAPIC_REDIR_UNMASKED       (0)
+
+/* ===== Vector allocation =====
+ * Vectors 32-47: ISA IRQs 0-15 (legacy PIC remap range)
+ * Vectors 48-51: PCI PIRQ GSIs 16-19 (PIIX3 PIRQA-PIRQD)
+ */
+#define IRQ_VECTOR_BASE     32
+#define PCI_IRQ_VECTOR_BASE 48
+#define PCI_GSI_BASE        16
+#define PCI_NUM_PIRQ        4
 
 /* ===== API ===== */
 
@@ -73,5 +84,17 @@ uint8_t lapic_get_id(void);
 
 /* Map an ISA IRQ to its GSI (considering ACPI interrupt source overrides). */
 uint32_t isa_irq_to_gsi(uint8_t isa_irq);
+
+/* Route an interrupt through the I/O APIC with configurable polarity/trigger.
+ * Used for PCI IRQs (active-low, level-triggered) vs ISA (active-high, edge).
+ *   gsi          - I/O APIC pin (Global System Interrupt)
+ *   vector       - IDT vector (must be >= 0x20)
+ *   dest_apic_id - destination LAPIC ID
+ *   polarity_low - 1 = active low, 0 = active high
+ *   trigger_level- 1 = level-triggered, 0 = edge-triggered
+ *   mask         - 1 = masked, 0 = unmasked
+ */
+void apic_route_irq(uint8_t gsi, uint8_t vector, uint8_t dest_apic_id,
+                     int polarity_low, int trigger_level, int mask);
 
 #endif /* LUMAOS_APIC_H */

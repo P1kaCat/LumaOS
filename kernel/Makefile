@@ -78,7 +78,7 @@ $(BUILD_DIR)/vfs.o: vfs.c vfs.h fat32.h cpu.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c vfs.c -o $@
 
-$(BUILD_DIR)/pci.o: pci.c pci.h cpu.h
+$(BUILD_DIR)/pci.o: pci.c pci.h cpu.h apic.h acpi.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c pci.c -o $@
 
