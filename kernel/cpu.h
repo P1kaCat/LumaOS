@@ -27,6 +27,16 @@ static inline void outw(uint16_t port, uint16_t val) {
     __asm__ volatile ("outw %0, %1" : : "a"(val), "dN"(port));
 }
 
+static inline uint32_t inl(uint16_t port) {
+    uint32_t v;
+    __asm__ volatile ("inl %1, %0" : "=a"(v) : "dN"(port));
+    return v;
+}
+
+static inline void outl(uint16_t port, uint32_t val) {
+    __asm__ volatile ("outl %0, %1" : : "a"(val), "dN"(port));
+}
+
 /* ===== GDT ===== */
 
 struct gdt_entry {

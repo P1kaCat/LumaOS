@@ -212,7 +212,8 @@ jobs:
             "[SYSCALL6] test passed" \
             "[CAT6] test passed" \
             "[INIT5] test passed" \
-            "[EXEC12] test passed"
+            "[EXEC12] test passed" \
+            "[PCI7] devices:"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"
