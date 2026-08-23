@@ -101,6 +101,13 @@ jobs:
             -drive file=build/disk.img,format=raw,if=ide,index=1 \
             -device qemu-xhci,id=xhci \
             -device usb-kbd,bus=xhci.0 \
+            -device ich9-ahci,id=ahci \
+            -drive file=build/disk.img,if=none,id=nvm0,format=raw \
+            -device nvme,serial=deadbeef,drive=nvm0 \
+            -netdev user,id=net0 \
+            -device e1000,netdev=net0 \
+            -device intel-hda \
+            -device hda-duplex \
             -serial file:serial.log &
           QEMU_PID=$!
 
@@ -221,7 +228,12 @@ jobs:
             "[PCI7a4] IRQ routing OK" \
             "[XHCI7b1] controller discovered" \
             "[XHCI7b2] reset + rings ready" \
-            "[XHCI7b3] port reset + slot enabled"
+            "[XHCI7b3] port reset + slot enabled" \
+            "[XHCI7b4] device addressed + descriptor parsed" \
+            "[AHCI7c] controller initialized + ports scanned" \
+            "[NVME7d] controller initialized + admin queue ready" \
+            "[E1000-8] ethernet controller initialized + MAC read" \
+            "[HDA7e] audio controller initialized + CORB/RIRB ready"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"

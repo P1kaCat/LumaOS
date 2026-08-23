@@ -133,11 +133,67 @@ struct xhci_erst_entry {
     uint32_t reserved;
 };
 
+/* ===== USB Standard Definitions ===== */
+struct __attribute__((packed)) usb_setup_packet {
+    uint8_t  bmRequestType;
+    uint8_t  bRequest;
+    uint16_t wValue;
+    uint16_t wIndex;
+    uint16_t wLength;
+};
+
+struct __attribute__((packed)) usb_device_descriptor {
+    uint8_t  bLength;
+    uint8_t  bDescriptorType;
+    uint16_t bcdUSB;
+    uint8_t  bDeviceClass;
+    uint8_t  bDeviceSubClass;
+    uint8_t  bDeviceProtocol;
+    uint8_t  bMaxPacketSize0;
+    uint16_t idVendor;
+    uint16_t idProduct;
+    uint16_t bcdDevice;
+    uint8_t  iManufacturer;
+    uint8_t  iProduct;
+    uint8_t  iSerialNumber;
+    uint8_t  bNumConfigurations;
+};
+
+/* ===== xHCI Context Structures (32-byte mode) ===== */
+struct xhci_slot_context {
+    uint32_t info1;  /* route string (19:0), speed (23:20), ctx_entries (31:27) */
+    uint32_t info2;  /* root_port (23:16), num_ports (31:24) */
+    uint32_t tt;
+    uint32_t state;  /* slot_state (31:27), usb_dev_addr (7:0) */
+    uint32_t reserved[4];
+};
+
+struct xhci_ep_context {
+    uint32_t ep_info1; /* ep_state (2:0), interval (23:16) */
+    uint32_t ep_info2; /* cerr (2:1), ep_type (5:3), max_pkt_size (31:16) */
+    uint32_t tr_dequeue_lo; /* bit 0 = DCS */
+    uint32_t tr_dequeue_hi;
+    uint32_t ep_tx_info;    /* avg_trb_len (15:0) */
+    uint32_t reserved[3];
+};
+
+struct xhci_input_control_context {
+    uint32_t drop_flags;
+    uint32_t add_flags; /* bit 0: Slot, bit 1: EP0 */
+    uint32_t reserved[6];
+};
+
 /* Send a command on the command ring and wait for completion event */
 int xhci_send_command(struct xhci_trb *cmd, struct xhci_trb *event_out);
 
 /* Enable a device slot (returns allocated slot ID) */
 int xhci_enable_slot(uint32_t *slot_id_out);
+
+/* Address a device slot and configure EP0 */
+int xhci_address_device(uint32_t slot_id, uint32_t port_id, uint32_t speed);
+
+/* Read USB Device Descriptor via EP0 control transfer */
+int xhci_get_device_descriptor(uint32_t slot_id, struct usb_device_descriptor *desc_out);
 
 /* Probe and initialize connected USB ports */
 void xhci_probe_ports(void);

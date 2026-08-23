@@ -84,6 +84,13 @@ run: build
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
 	  -device qemu-xhci,id=xhci \
 	  -device usb-kbd,bus=xhci.0 \
+	  -device ich9-ahci,id=ahci \
+	  -drive file=$(DISK_IMG),if=none,id=nvm0,format=raw \
+	  -device nvme,serial=deadbeef,drive=nvm0 \
+	  -netdev user,id=net0 \
+	  -device e1000,netdev=net0 \
+	  -device intel-hda \
+	  -device hda-duplex \
 	  -serial stdio
 
 # debug : build + QEMU freeze au boot (gdbstub, port 1234)
@@ -97,6 +104,13 @@ debug: build
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
 	  -device qemu-xhci,id=xhci \
 	  -device usb-kbd,bus=xhci.0 \
+	  -device ich9-ahci,id=ahci \
+	  -drive file=$(DISK_IMG),if=none,id=nvm0,format=raw \
+	  -device nvme,serial=deadbeef,drive=nvm0 \
+	  -netdev user,id=net0 \
+	  -device e1000,netdev=net0 \
+	  -device intel-hda \
+	  -device hda-duplex \
 	  -serial stdio \
 	  -s -S
 

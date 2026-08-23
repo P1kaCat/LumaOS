@@ -170,4 +170,42 @@ $$\text{Userland} \longrightarrow \text{Syscalls (open/close/read/exec)} \longri
   - Réception et acquittement des événements de complétion sur l'Event Ring via `ERDP`.
   - Commandes `NO_OP` et `ENABLE_SLOT`.
   - Détection de présence matérielle (`PORTSC.CCS`), réinitialisation de port (`PORTSC.PR`), lecture de la vitesse de négociation (USB Full/Low/High/SuperSpeed).
+- **Énumération & Transferts de Contrôle (7b.4)** :
+  - Allocation des contextes xHCI (Input Control, Slot, EP0) et Device Context dans `DCBAA[Slot_ID]`.
+  - Exécution de la commande `ADDRESS_DEVICE` (TRB Type 11).
+  - Émission de la requête standard `GET_DESCRIPTOR` via l'anneau de transfert EP0 (Setup Stage $\rightarrow$ Data Stage $\rightarrow$ Status Stage).
+  - Parsing du descripteur de périphérique USB standard (Vendor ID, Product ID, Device Class, Number of Configurations).
+
+### Contrôleur Stockage AHCI / SATA (Phase 7c)
+- Découverte PCI de la classe `0x01 / 0x06 / 0x01` (ou contrôleur Intel ICH9).
+- Mapping MMIO de l'ABAR (BAR5) et activation du mode AHCI (`GHC.AE = 1`).
+- Énumération des 32 ports implémentés (`PI` bitmask).
+- Détection de présence matérielle (`PxSSTS.DET == 3`) et lecture de signature (`AHCI_SIG_ATA` pour disques durs/SSD SATA, `AHCI_SIG_ATAPI` pour lecteurs optiques).
+- Allocation et programmation des structures Command List (`PxCLB`) et Received FIS (`PxFB`), et démarrage du port (`PxCMD.ST | PxCMD.FRE`).
+
+### Contrôleur Stockage NVMe PCIe (Phase 7d)
+- Découverte PCI de la classe `0x01 / 0x08 / 0x02` (NVM Express).
+- Mapping MMIO de BAR0 64-bit et lecture des capacités / version (`CAP`, `VS`).
+- Allocation et programmation de l'Admin Submission Queue (`ASQ`, 64 entrées) et de l'Admin Completion Queue (`ACQ`, 64 entrées) via `AQA`.
+- Activation du contrôleur (`CC.EN = 1`) avec vérification de l'état prêt (`CSTS.RDY = 1`).
+- Envoi de la commande Admin `IDENTIFY Controller` (Opcode 0x06) avec sonnerie du Doorbell SQ 0 et lecture du modèle et numéro de série du SSD.
+
+### Contrôleur Audio Intel High Definition Audio (HDA) (Phase 7e)
+- Découverte PCI de la classe `0x04 / 0x03 / 0x00`.
+- Mapping MMIO de BAR0 64-bit.
+- Séquence de réinitialisation matérielle (`GCTL.CRST = 0` puis `GCTL.CRST = 1`).
+- Détection des codecs connectés via `STATESTS`.
+- Allocation et démarrage des anneaux CORB (Command Outbound Ring Buffer) et RIRB (Response Inbound Ring Buffer).
+
+---
+
+## 7. Sous-Système Réseau (Phase 8)
+
+### Driver Ethernet Intel e1000 (82540EM / Gigabit)
+- Découverte PCI du contrôleur réseau (Device ID `8086:100E` ou classe réseau).
+- Mapping MMIO de BAR0 et configuration du lien (`CTRL.SLU = 1`).
+- Lecture de l'adresse MAC matérielle via registres `RAL0`/`RAH0` ou EEPROM (`EERD`).
+- Allocation de l'anneau de réception RX (32 descripteurs de buffers 2 Ko) et configuration de `RCTL`.
+- Allocation de l'anneau d'émission TX (16 descripteurs de buffers 2 Ko) et configuration de `TCTL`.
+- Moteur d'émission de trames Ethernet (`e1000_send_packet`) et de réception (`e1000_recv_packet`).
 

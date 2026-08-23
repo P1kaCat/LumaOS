@@ -13,12 +13,17 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (17 markers):
+- [x] Boot marker verification (21 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
   - `[PCI7] devices:`, `[ACPI7a2] tables parsed`, `[APIC7a3]`, `[PCI7a4]`
   - `[XHCI7b1]`, `[XHCI7b2] reset + rings ready`, `[XHCI7b3] port reset + slot enabled`
+  - `[XHCI7b4] device addressed + descriptor parsed`
+  - `[AHCI7c] controller initialized + ports scanned`
+  - `[NVME7d] controller initialized + admin queue ready`
+  - `[E1000-8] ethernet controller initialized + MAC read`
+  - `[HDA7e] audio controller initialized + CORB/RIRB ready`
 - [x] Serial log artifact upload on failure
 
 Commits: `da6ede8` (initial workflow + outb fix), `e3915b7` (headless `-display none`), `d9c4dbe` (monitor `sendkey` injection), `e699f05` (added [VFS] + [SYSCALL6] markers), `c15678e` (added [INIT5] marker), `8065462` (added [CAT6] marker + cat sendkey)
@@ -304,26 +309,58 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Port Reset assertion (`PORTSC.PR`) and verification of port enablement (`PORTSC.PED`)
 - [x] `[XHCI7b3] port reset + slot enabled` CI marker
 
-### Next drivers — ⬜ Planned
-- [ ] xHCI device context setup (Input Context, Device Context, Slot/EP0 Contexts)
-- [ ] Address Device command & Endpoint 0 Transfer Ring setup
-- [ ] USB Device Descriptor reading (GET_DESCRIPTOR)
-- [ ] USB HID keyboard driver
-- [ ] USB HID mouse driver
-- [ ] NVMe / SATA storage
-- [ ] Audio
-- [ ] Networking
+### xHCI Device Enumeration & Control Transfers — ✅ Done (Phase 7b.4)
+- [x] Input Context and Device Context allocation
+- [x] Endpoint 0 Transfer Ring setup
+- [x] `ADDRESS_DEVICE` command execution (TRB Type 11)
+- [x] USB Control Transfer: `GET_DESCRIPTOR` request (Setup Stage $\rightarrow$ Data Stage $\rightarrow$ Status Stage)
+- [x] USB Device Descriptor parsing (Vendor ID, Product ID, Device Class)
+- [x] `[XHCI7b4] device addressed + descriptor parsed` CI marker
+
+### AHCI / SATA Storage Driver — ✅ Done (Phase 7c)
+- [x] AHCI HBA controller discovery (PCI Class 01/06/01 or Intel ICH9)
+- [x] ABAR (BAR5) MMIO mapping
+- [x] Global Host Control setup (`GHC.AE = 1`)
+- [x] Ports Implemented (`PI`) enumeration (32 ports)
+- [x] Port status detection (`SSTS.DET == 3`) and signature reading (`SIG_ATA` / `SIG_ATAPI`)
+- [x] Port Command List and Received FIS structure allocation & port start (`PxCMD.ST | PxCMD.FRE`)
+- [x] `[AHCI7c] controller initialized + ports scanned` CI marker
+
+### NVMe Storage Driver — ✅ Done (Phase 7d)
+- [x] NVMe PCIe controller discovery (PCI Class 01/08/02)
+- [x] BAR0 64-bit MMIO mapping
+- [x] Controller capabilities and version check (`CAP`, `VS`)
+- [x] Admin Submission Queue (`ASQ`) & Admin Completion Queue (`ACQ`) allocation (64 entries each)
+- [x] Controller configuration and enable (`CC.EN = 1`, wait for `CSTS.RDY = 1`)
+- [x] Admin `IDENTIFY Controller` command execution & model / serial number parsing
+- [x] `[NVME7d] controller initialized + admin queue ready` CI marker
+
+### Intel High Definition Audio (HDA) — ✅ Done (Phase 7e)
+- [x] Intel HDA audio controller discovery (PCI Class 04/03/00)
+- [x] BAR0 64-bit MMIO mapping
+- [x] Hardware controller reset sequence (`GCTL.CRST = 0` then `GCTL.CRST = 1`)
+- [x] Codec discovery via `STATESTS`
+- [x] CORB (Command Outbound Ring Buffer) and RIRB (Response Inbound Ring Buffer) setup and start
+- [x] `[HDA7e] audio controller initialized + CORB/RIRB ready` CI marker
 
 ---
 
 ## Phase 8 — Networking
-**Status: ⬜ Not started**
+**Status: 🔄 In Progress**
 
-- [ ] Ethernet / NIC driver
-- [ ] IP / ARP
-- [ ] UDP / TCP
-- [ ] DNS
-- [ ] Userland networking API
+- [x] Intel e1000 Gigabit Ethernet controller discovery (PCI 8086:100E)
+- [x] BAR0 MMIO mapping & Link Up configuration (`CTRL.SLU = 1`)
+- [x] Hardware MAC address reading (via `RAL0`/`RAH0` or `EERD` EEPROM)
+- [x] RX Descriptor Ring allocation (32 descriptors of 2 KB buffers) & `RCTL` configuration
+- [x] TX Descriptor Ring allocation (16 descriptors) & `TCTL` configuration
+- [x] Ethernet packet transmission engine (`e1000_send_packet`)
+- [x] Ethernet packet reception engine (`e1000_recv_packet`)
+- [x] Test Ethernet frame transmission
+- [x] `[E1000-8] ethernet controller initialized + MAC read` CI marker
+- [ ] IP / ARP network stack
+- [ ] UDP / TCP transport layer
+- [ ] DNS resolution
+- [ ] Userland networking API / sockets
 
 ---
 
