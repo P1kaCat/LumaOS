@@ -19,7 +19,7 @@ KERNEL_BIN := $(BUILD_DIR)/kernel.elf
 KERNEL_OBJS := $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o \
                $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o \
                $(BUILD_DIR)/user.o $(BUILD_DIR)/init_code.o $(BUILD_DIR)/shell_code.o $(BUILD_DIR)/ata.o \
-               $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o $(BUILD_DIR)/pci.o $(BUILD_DIR)/acpi.o
+               $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o $(BUILD_DIR)/pci.o $(BUILD_DIR)/acpi.o $(BUILD_DIR)/apic.o
 
 .PHONY: all clean
 
@@ -30,11 +30,11 @@ $(KERNEL_BIN): $(KERNEL_OBJS) linker.ld
 	$(LD) $(KERNEL_LDFLAGS) -o $@ $(KERNEL_OBJS)
 	@echo "Kernel built: $@"
 
-$(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h pci.h acpi.h ../include/handoff.h
+$(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h pci.h acpi.h apic.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
-$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h ../include/handoff.h
+$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
 
@@ -85,6 +85,10 @@ $(BUILD_DIR)/pci.o: pci.c pci.h cpu.h
 $(BUILD_DIR)/acpi.o: acpi.c acpi.h cpu.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c acpi.c -o $@
+
+$(BUILD_DIR)/apic.o: apic.c apic.h acpi.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c apic.c -o $@
 
 clean:
 	@rm -rf $(BUILD_DIR)

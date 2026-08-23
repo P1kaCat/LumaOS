@@ -214,7 +214,8 @@ jobs:
             "[INIT5] test passed" \
             "[EXEC12] test passed" \
             "[PCI7] devices:" \
-            "[ACPI7a2] tables parsed"
+            "[ACPI7a2] tables parsed" \
+            "[APIC7a3] LAPIC + IOAPIC enabled"
           do
             if grep -qF "$marker" serial.log; then
               echo "  ✓ Found: $marker"

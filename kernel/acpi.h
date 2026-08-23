@@ -146,6 +146,19 @@ struct acpi_mcfg_allocation {
     uint32_t reserved;
 };
 
+/* ===== MADT Interrupt Source Override =====
+ * Maps an ISA IRQ to a different GSI on the I/O APIC.
+ * E.g. QEMU i440FX: ISA IRQ 0 (PIT) → GSI 2.
+ */
+struct acpi_int_src_override {
+    uint8_t  bus;       /* 0 = ISA */
+    uint8_t  source;   /* ISA IRQ number */
+    uint32_t gsi;       /* Global System Interrupt (I/O APIC pin) */
+    uint16_t flags;     /* Polarity (bits 0-1) + Trigger mode (bits 2-3) */
+};
+
+#define ACPI_MAX_INT_SRC_OVERRIDES 16
+
 /* ===== Global state (set by acpi_init) ===== */
 
 extern struct acpi_rsdp       *g_acpi_rsdp;
@@ -154,6 +167,20 @@ extern struct acpi_madt       *g_acpi_madt;
 extern struct acpi_fadt       *g_acpi_fadt;
 extern struct acpi_mcfg       *g_acpi_mcfg;
 extern int                    g_acpi_num_tables;
+
+/* IOAPIC info (from MADT IOAPIC entry) */
+extern uint32_t g_acpi_ioapic_addr;
+extern uint8_t  g_acpi_ioapic_id;
+extern uint32_t g_acpi_ioapic_gsi_base;
+extern int      g_acpi_ioapic_found;
+
+/* LAPIC info (from MADT LAPIC entry — first enabled CPU) */
+extern uint8_t  g_acpi_lapic_apic_id;
+extern int      g_acpi_lapic_found;
+
+/* Interrupt source overrides */
+extern struct acpi_int_src_override g_acpi_int_src_overrides[];
+extern int g_acpi_num_int_src_overrides;
 
 /* ===== API ===== */
 

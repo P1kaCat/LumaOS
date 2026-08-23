@@ -13,7 +13,7 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (12 markers):
+- [x] Boot marker verification (13 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`
@@ -251,6 +251,17 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] MCFG parsing (if available — ECAM base, bus range)
 - [x] `acpi_find_table()` API for future drivers
 - [x] `[ACPI7a2] tables parsed` CI marker
+
+### Local APIC + I/O APIC — ✅ Done (Phase 7a.3)
+- [x] Disable legacy 8259 PIC (mask all interrupts)
+- [x] Enable LAPIC (SVR, TPR=0, mask LINT0/LINT1/timer/error LVTs)
+- [x] I/O APIC initialization (index/data window access)
+- [x] ISA IRQ → GSI mapping via ACPI interrupt source overrides
+- [x] I/O APIC redirection entries (24 entries, mask/unmask)
+- [x] Route ISA IRQs 0-15 to vectors 32-47 (same as PIC remap)
+- [x] Unmask timer (IRQ0 → GSI 2 via override) and keyboard (IRQ1 → GSI 1)
+- [x] LAPIC EOI replaces PIC EOI in irq_default_handler
+- [x] `[APIC7a3] LAPIC + IOAPIC enabled` CI marker
 
 ### Next drivers — ⬜ Planned
 - [ ] USB

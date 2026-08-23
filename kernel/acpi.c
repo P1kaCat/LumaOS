@@ -22,6 +22,20 @@ struct acpi_fadt       *g_acpi_fadt  = 0;
 struct acpi_mcfg       *g_acpi_mcfg  = 0;
 int                    g_acpi_num_tables = 0;
 
+/* IOAPIC info (from MADT) */
+uint32_t g_acpi_ioapic_addr   = 0xFEC00000;  /* default QEMU */
+uint8_t  g_acpi_ioapic_id     = 0;
+uint32_t g_acpi_ioapic_gsi_base = 0;
+int      g_acpi_ioapic_found  = 0;
+
+/* LAPIC info (from MADT — first enabled CPU) */
+uint8_t  g_acpi_lapic_apic_id = 0;
+int      g_acpi_lapic_found   = 0;
+
+/* Interrupt source overrides */
+struct acpi_int_src_override g_acpi_int_src_overrides[ACPI_MAX_INT_SRC_OVERRIDES];
+int g_acpi_num_int_src_overrides = 0;
+
 /* ===== Local helpers ===== */
 
 static char *uitoa(uint64_t n, char *buf) {
@@ -137,7 +151,7 @@ static void parse_madt(struct acpi_madt *madt) {
     /* Walk interrupt controller structures */
     uint8_t *p = (uint8_t *)madt + sizeof(struct acpi_madt);
     uint8_t *end = (uint8_t *)madt + madt->header.length;
-    int num_lapic = 0, num_ioapic = 0, num_other = 0;
+    int num_lapic = 0, num_ioapic = 0, num_isor = 0;
 
     while (p + 2 <= end) {
         struct acpi_madt_entry_header *eh = (struct acpi_madt_entry_header *)p;
@@ -146,13 +160,30 @@ static void parse_madt(struct acpi_madt *madt) {
         switch (eh->type) {
             case ACPI_MADT_TYPE_LAPIC:
                 num_lapic++;
+                /* LAPIC entry: type(1) len(1) acpi_proc_id(1) apic_id(1) flags(4) */
+                if (p + 8 <= end && !g_acpi_lapic_found) {
+                    uint8_t apic_id = p[3];
+                    uint32_t cpu_flags = *(uint32_t *)(p + 4);
+                    if (cpu_flags & 1) {  /* Processor Enabled */
+                        g_acpi_lapic_apic_id = apic_id;
+                        g_acpi_lapic_found = 1;
+                        serial_puts("  LAPIC CPU apic_id=");
+                        serial_puts(uitoa(apic_id, buf));
+                        serial_puts("\n");
+                    }
+                }
                 break;
             case ACPI_MADT_TYPE_IOAPIC:
                 num_ioapic++;
+                /* IOAPIC entry: type(1) len(1) id(1) reserved(1) addr(4) gsi_base(4) = 12 bytes */
                 if (p + 12 <= end) {
                     uint8_t ioapic_id = p[2];
                     uint32_t ioapic_addr = *(uint32_t *)(p + 4);
                     uint32_t gsi_base = *(uint32_t *)(p + 8);
+                    g_acpi_ioapic_id = ioapic_id;
+                    g_acpi_ioapic_addr = ioapic_addr;
+                    g_acpi_ioapic_gsi_base = gsi_base;
+                    g_acpi_ioapic_found = 1;
                     serial_puts("  IOAPIC id=");
                     serial_puts(uitoa(ioapic_id, buf));
                     serial_puts(" addr=0x");
@@ -162,8 +193,30 @@ static void parse_madt(struct acpi_madt *madt) {
                     serial_puts("\n");
                 }
                 break;
+            case ACPI_MADT_TYPE_INT_SRC_OVR:
+                num_isor++;
+                /* Int Source Override: type(1) len(1) bus(1) source(1) gsi(4) flags(2) = 10 bytes */
+                if (p + 10 <= end &&
+                    g_acpi_num_int_src_overrides < ACPI_MAX_INT_SRC_OVERRIDES) {
+                    struct acpi_int_src_override *iso =
+                        &g_acpi_int_src_overrides[g_acpi_num_int_src_overrides];
+                    iso->bus = p[2];
+                    iso->source = p[3];
+                    iso->gsi = *(uint32_t *)(p + 4);
+                    iso->flags = *(uint16_t *)(p + 8);
+                    g_acpi_num_int_src_overrides++;
+                    serial_puts("  IntSrcOvr: bus=");
+                    serial_puts(uitoa(iso->bus, buf));
+                    serial_puts(" irq=");
+                    serial_puts(uitoa(iso->source, buf));
+                    serial_puts(" -> gsi=");
+                    serial_puts(uitoa(iso->gsi, buf));
+                    serial_puts(" flags=0x");
+                    serial_puts(uxtoa(iso->flags, buf));
+                    serial_puts("\n");
+                }
+                break;
             default:
-                num_other++;
                 break;
         }
         p += eh->length;
@@ -173,10 +226,8 @@ static void parse_madt(struct acpi_madt *madt) {
     serial_puts(uitoa(num_lapic, buf));
     serial_puts(", IOAPIC entries: ");
     serial_puts(uitoa(num_ioapic, buf));
-    if (num_other) {
-        serial_puts(", other: ");
-        serial_puts(uitoa(num_other, buf));
-    }
+    serial_puts(", IntSrcOvr: ");
+    serial_puts(uitoa(num_isor, buf));
     serial_puts("\n");
 }
 

@@ -8,6 +8,7 @@
 #include "mem.h"
 #include "vfs.h"
 #include "user.h"
+#include "apic.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -301,7 +302,7 @@ void irq_default_handler(uint8_t irq) {
             }
         }
     }
-    pic_eoi(irq);
+    apic_eoi(irq);
 }
 
 /* ===== Syscall handler (Phase 5: stable API) ===== */
