@@ -5,6 +5,11 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
 ## Validation locale — 2026-09-07
 
 - Base : `6f0ba38`, branche `main`. Correctif CP1252 du générateur de disque conservé.
+- Push `797cb89` confirmé sur `main`. CI Ubuntu 22.04 / QEMU 6.2 : build et
+  workflow xHCI PASS, mais QEMU Boot Test échoue avant le boot : IDE et NVMe
+  ouvrent `disk.img` en écriture (`Failed to get "write" lock`). QEMU Windows
+  11.1 n'avait pas rejeté cette configuration. Le harness utilise désormais une
+  copie `build/nvme.img` pour NVMe ; nouvelle validation Ubuntu en attente.
 - `make clean`, puis `make build` : PASS (avertissements préexistants).
 - QEMU 11.1.0 : boot, shell, `cat hello.txt`, `run prog.elf`, `exit` : PASS.
   Les 23 marqueurs inchangés du workflow sont présents ; pages libres avant/après

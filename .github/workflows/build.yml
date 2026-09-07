@@ -85,6 +85,8 @@ jobs:
 
           # Copy OVMF vars (normally done by 'make run')
           cp tools/ovmf/OVMF_VARS.fd build/ovmf_vars.fd
+          # IDE and NVMe must not open the same image writable (Linux locking).
+          cp build/disk.img build/nvme.img
 
           # Start QEMU headless:
           #   -display none  : no GTK in headless CI
@@ -106,7 +108,7 @@ jobs:
             -device qemu-xhci,id=xhci \
             -device usb-kbd,bus=xhci.0,display=ci-video \
             -device ich9-ahci,id=ahci \
-            -drive file=build/disk.img,if=none,id=nvm0,format=raw \
+            -drive file=build/nvme.img,if=none,id=nvm0,format=raw \
             -device nvme,serial=deadbeef,drive=nvm0 \
             -netdev user,id=net0 \
             -device e1000,netdev=net0 \
