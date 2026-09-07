@@ -176,7 +176,7 @@ def create_disk(path, prog_path=None):
             disk[cl_off:cl_off + len(chunk)] = chunk
 
         next_free_cluster += num_clusters
-        print(f"  PROG.ELF → clusters {first_prog_cluster}-{first_prog_cluster + num_clusters - 1}")
+        print(f"  PROG.ELF -> clusters {first_prog_cluster}-{first_prog_cluster + num_clusters - 1}")
     else:
         print("\nNo ELF program provided (skipping PROG.ELF)")
 

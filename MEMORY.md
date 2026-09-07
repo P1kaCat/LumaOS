@@ -2,6 +2,27 @@
 
 Ce document décrit l'architecture mémoire, le système de fichiers, les appels système et l'état des sous-systèmes matériels de LumaOS.
 
+## Reprise locale — 2026-09-07
+
+- Base inspectée : `560248a`, branche `main`, identique à `origin/main` après fetch.
+- Build Windows : `make -B build` compilait les binaires mais échouait dans
+  `create_disk.py` (flèche Unicode non encodable en CP1252). Diagnostic remplacé
+  par ASCII ; `make build` termine ensuite avec succès et crée le disque FAT32.
+- QEMU 11.1.0 lancé sans affichage, avec les périphériques du Makefile : boot
+  jusqu'au shell et marqueurs VFS, SYSCALL6, CAT6, INIT5, EXEC12 observés.
+- Régressions complètes : FAIL. Le marqueur `[XHCI7b1] controller discovered`
+  manque ; les commandes `cat hello.txt`, `run prog.elf`, `exit` injectées via
+  le moniteur ne sont pas observées dans le shell. Le test final de libération
+  des pages n'a donc pas été atteint. Cause de l'entrée clavier à diagnostiquer.
+- Réseau : initialisation observée, mais le log indique `ICMP Echo Request queued`,
+  sans réponse Echo. Le message UDP seul ne valide pas la transmission effective.
+- Ébauche graphique locale préexistante : `console.c/.h` dessinent des carrés
+  pleins, sans glyphes. Ce travail n'est pas une console texte validée.
+- Logs locaux : `build/validation-serial.log`, `build/validation-qemu.log`
+  (ignorés par Git). Matériel réel : NOT TESTED.
+- Prochaine étape : diagnostiquer l'injection clavier QEMU et rétablir la
+  validation complète avant d'étendre le réseau ou le rendu graphique.
+
 ---
 
 ## 1. Architecture Mémoire

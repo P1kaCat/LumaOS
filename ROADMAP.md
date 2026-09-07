@@ -7,6 +7,12 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 ## CI/CD
 **Status: ✅ Operational**
 
+Local revalidation (2026-09-07, Windows, base `560248a`): build PASS after
+fixing a CP1252 diagnostic in the disk generator. QEMU reaches the shell;
+full regression FAIL: missing xHCI discovery marker and shell-exit cleanup
+marker, with injected shell commands not observed. Historical checkboxes below
+do not establish a complete pass for this local state. See `MEMORY.md`.
+
 - [x] GitHub Actions workflow (`.github/workflows/build.yml`)
 - [x] Build job: `make clean && make` on `ubuntu-22.04` with `clang + lld`
 - [x] Artifact verification: `kernel.elf`, `BOOTX64.EFI`, `disk.img`
