@@ -15,6 +15,7 @@
 #include "nvme.h"
 #include "net.h"
 #include "audio.h"
+#include "console.h"
 
 static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
@@ -104,6 +105,7 @@ void kernel_main(struct lumaos_handoff *ho) {
 
     uint32_t bg = make_color(15,15,45,ho->fb_format);
     fb_fill(ho, bg);
+    draw_string(ho, "LumaOS Phase 9", 20, 20, 0xFFFFFFFF);
     uint32_t green = make_color(40,200,100,ho->fb_format);
     uint32_t cx=ho->fb_width/2, cy=ho->fb_height/2, bw=ho->fb_width/4, bh=ho->fb_height/4;
     fb_rect(ho, green, cx-bw/2, cy-bh/2, bw, bh);

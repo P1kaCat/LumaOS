@@ -7,14 +7,12 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 ## CI/CD
 **Status: ✅ Operational**
 
-Local revalidation (2026-09-07, Windows, base `6f0ba38` plus regression fix):
-`make clean` + `make build` PASS. QEMU 11.1.0 reaches the shell and executes
-`cat hello.txt`, `run prog.elf`, `exit`; all **23/23 unchanged markers** present,
-free pages **7624 before == 7624 final**. Restored the removed xHCI discovery
-marker and routed monitor input to PS/2 while retaining the USB enumeration
-fixture. Same CI injection script, TCP localhost transport instead of Unix socket.
-Ubuntu CI and physical/USB keyboard input are not validated by this local run.
-See `MEMORY.md` for the root cause, evidence and remaining limitations.
+Validated on Ubuntu 22.04 / QEMU 6.2 at `303d27d`:
+[Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34140244402) and
+[xHCI Driver Test](https://github.com/P1kaCat/LumaOS/actions/runs/34140244405) PASS.
+**23/23 unchanged markers**, interactive `cat`, `run`, `exit`, free pages
+**7591 before == 7591 final**. Keyboard routing, missing xHCI discovery marker
+and Linux disk-lock conflict corrected. Physical/USB HID input remains untested.
 
 - [x] GitHub Actions workflow (`.github/workflows/build.yml`)
 - [x] Build job: `make clean && make` on `ubuntu-22.04` with `clang + lld`
@@ -386,7 +384,12 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 ---
 
 ## Phase 9 — Graphical Interface
-**Status: ⬜ Not started**
+**Status: 🔄 In Progress**
+
+- [x] Phase 9.1: ASCII font renderer, transparent 8x8 cells, clipped writes
+  (host guard/stride tests + QEMU screenshot + 23/23 local regressions).
+- [ ] Phase 9.2: text console, cursor, wrapping and scrolling
+- [ ] Phase 9.3: connect the existing Ring 3 shell to the framebuffer
 
 - [ ] Framebuffer console
 - [ ] 2D rendering

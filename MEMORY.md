@@ -2,49 +2,32 @@
 
 Ce document décrit l'architecture mémoire, le système de fichiers, les appels système et l'état des sous-systèmes matériels de LumaOS.
 
-## Validation locale — 2026-09-07
+## État validé — 2026-09-07
 
-- Base : `6f0ba38`, branche `main`. Correctif CP1252 du générateur de disque conservé.
-- Push `797cb89` confirmé sur `main`. CI Ubuntu 22.04 / QEMU 6.2 : build et
-  workflow xHCI PASS, mais QEMU Boot Test échoue avant le boot : IDE et NVMe
-  ouvrent `disk.img` en écriture (`Failed to get "write" lock`). QEMU Windows
-  11.1 n'avait pas rejeté cette configuration. Le harness utilise désormais une
-  copie `build/nvme.img` pour NVMe ; nouvelle validation Ubuntu en attente.
-- `make clean`, puis `make build` : PASS (avertissements préexistants).
-- QEMU 11.1.0 : boot, shell, `cat hello.txt`, `run prog.elf`, `exit` : PASS.
-  Les 23 marqueurs inchangés du workflow sont présents ; pages libres avant/après
-  sortie : **7624 == 7624**. Le programme ELF est exécuté par init puis par le shell.
-- Cause clavier : `usb-kbd`, ajouté à la CI dans `af21d1c`, prend les événements
-  `sendkey` par défaut. LumaOS traite uniquement les entrées PS/2, pas les rapports
-  HID USB. Après attente du shell, les traces montrent les événements QEMU mais
-  aucun `ps2_keyboard_event`. Sur le même binaire sans USB, `help` fonctionne.
-- Correctif du harness : conserver le clavier USB pour l'énumération xHCI, mais
-  le lier à `display=ci-video`. Créer d'abord `VGA,id=ci-video` avec `-vga none`.
-  Les événements du moniteur sans écran source atteignent alors le PS/2 ; le test
-  avec USB conservé exécute `help` et les commandes CI. Aucun changement au shell,
-  au pilote PS/2, aux 23 attentes ou aux délais d'injection.
-- Cause du second marqueur : `f999266` avait supprimé `[XHCI7b1]` en ajoutant le
-  reset. Restauré après découverte/mapping/lecture des registres, avant le reset.
-  Aucun ancien résultat 23/23 établi : cette suppression précède les 23 attentes
-  introduites par `560248a`.
-- Validation locale : commande QEMU et Python d'injection extraits du workflow,
-  transport moniteur TCP localhost au lieu du socket Unix Linux ; attente de 10 s,
-  mêmes `sendkey`. GitHub Actions sur Ubuntu n'a pas été exécuté dans cette session.
-- Sources QEMU : [routage des entrées](https://github.com/qemu/qemu/blob/v9.2.0/ui/input.c),
-  [liaison display du clavier USB](https://github.com/qemu/qemu/blob/v9.2.0/hw/usb/dev-hid.c).
-- Réseau : initialisation observée, mais le log indique `ICMP Echo Request queued`,
-  sans réponse Echo. Le message UDP seul ne valide pas la transmission effective.
-- Ébauche graphique locale préexistante : `console.c/.h` dessinent des carrés
-  pleins, sans glyphes. Ce travail n'est pas une console texte validée.
-- Logs locaux : `build/regression-serial.log`, `build/regression-qemu.log` ;
-  traces comparatives `build/diag-usb.stderr`, `build/diag-ps2.stderr`,
-  `build/diag-bound.stderr`. Replay local : `python3 build/replay_ci.py`
-  (fichiers ignorés par Git, supprimés par `make clean`). Matériel réel : NOT TESTED.
-- Limite : le routage explicite est celui de la CI. `make run` reste inchangé et
-  son clavier USB capte toujours les entrées par défaut ; le support HID n'est pas
-  implémenté. Ce résultat n'est pas une validation de saisie physique ou USB.
-- Prochaine étape : après accord de publication, confirmer le même résultat sur
-  le runner Ubuntu de GitHub Actions, avant toute nouvelle fonctionnalité.
+- Correction des régressions **complètement validée** : `303d27d`, `main` distant.
+  [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34140244402) et
+  [xHCI Driver Test](https://github.com/P1kaCat/LumaOS/actions/runs/34140244405) PASS.
+  Ubuntu 22.04 / QEMU 6.2 : **23/23 marqueurs**, `cat`, `run`, `exit` observés,
+  pages libres **7591 == 7591** avant/après terminaison.
+- Le harness lie le clavier USB à `ci-video` pour laisser `sendkey` atteindre
+  PS/2, tout en testant l'énumération USB. Le marqueur `[XHCI7b1]` supprimé dans
+  `f999266` a été restauré. Attentes et script d'injection inchangés.
+- Premier run de `797cb89` : échec avant boot sous Linux car IDE et NVMe ouvraient
+  le même disque en écriture. `303d27d` utilise une copie `nvme.img` en CI.
+  Le correctif CP1252 `6f0ba38` est conservé.
+- Phase 9.1 : ébauche `console.c/.h` reprise avec une police ASCII 5x7 en cellules
+  8x8, fond transparent, clipping, stride, remplacement des octets hors ASCII.
+  Tests du vrai renderer sur mémoire gardée : `python3 tests/test_console.py`.
+  Build et QEMU locaux PASS, **23/23**, titre « LumaOS Phase 9 » lisible.
+  Capture locale : `build/phase9-renderer.png`. Console interactive à poursuivre.
+- Limites : clavier USB HID et matériel réel non validés. `make run` conserve
+  encore le routage USB par défaut et le disque partagé IDE/NVMe ; utiliser la
+  configuration CI pour les régressions jusqu'à harmonisation du lanceur.
+- Réseau : marqueur d'initialisation présent mais aucune réponse ping établie ;
+  le message UDP seul n'est pas une preuve de transmission effective.
+- Logs locaux ignorés par Git : `build/regression-serial.log`,
+  `build/diag-{usb,ps2,bound}.stderr`. Replay : `python3 build/replay_ci.py`
+  (fichiers supprimés par `make clean`).
 
 ---
 
