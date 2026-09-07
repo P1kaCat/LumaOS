@@ -17,7 +17,8 @@ command = ['clang', '-ffreestanding', '-fno-stack-protector', '-O2',
            str(ROOT / 'kernel/console.c'), '-o', str(lib_path)]
 if os.name == 'nt':
     command += ['-fuse-ld=lld', '-Wl,/noentry', '-Wl,/export:draw_char',
-                '-Wl,/export:draw_string']
+                '-Wl,/export:draw_string', '-Wl,/export:console_init',
+                '-Wl,/export:console_clear', '-Wl,/export:console_write']
 else:
     command += ['-fPIC']
 subprocess.run(command, check=True)
@@ -97,3 +98,67 @@ for field, value in [('framebuffer', 0), ('fb_bpp', 24), ('fb_pitch', 4),
     lib.draw_char(C.byref(ho), b'A', 0, 0, FG)
     assert list(data) == before, 'invalid framebuffer must be ignored'
 print('PASS: ASCII glyphs, transparency, fallback, clipping, stride and guards')
+
+lib.console_init.argtypes = [C.POINTER(Handoff)]
+lib.console_write.argtypes = [C.c_char_p]
+lib.console_clear.argtypes = []
+
+
+def console_surface(fmt=0, width=24, height=65, stride=29):
+    data, ho = surface(width, height, stride)
+    ho.fb_format = fmt
+    lib.console_init(C.byref(ho))
+    return data, ho
+
+
+def cell(data, ho, x, y):
+    stride = ho.fb_pitch // 4
+    return [data[1+(40+y*8+dy)*stride+x*8+dx] for dy in range(8) for dx in range(8)]
+
+
+for fmt, bg in [(0, 0x2D0F0F), (1, 0x0F0F2D)]:
+    data, ho = console_surface(fmt)
+    before = list(data)
+    assert cell(data, ho, 1, 0) == [bg]*64
+    assert cell(data, ho, 0, 0)[56:] == [0xFFFFFF]*8
+    lib.console_write(b'A')
+    first = cell(data, ho, 0, 0)
+    lib.console_write(b'B\b \b')
+    assert cell(data, ho, 0, 0) == first, 'backspace damaged preceding glyph'
+    assert cell(data, ho, 1, 0)[:56] == [bg]*56, 'backspace sequence did not erase'
+    lib.console_write(b'\rC')
+    assert cell(data, ho, 0, 0) != first, 'carriage return did not overwrite'
+    lib.console_clear()
+    lib.console_write(b'A\nB\nC')
+    second, third = cell(data, ho, 0, 1), cell(data, ho, 0, 2)
+    lib.console_write(b'\n')
+    assert cell(data, ho, 0, 0) == second, 'scroll did not move row 1 up'
+    assert cell(data, ho, 0, 1) == third, 'scroll did not move row 2 up'
+    assert cell(data, ho, 1, 2) == [bg]*64, 'scroll bottom row not cleared'
+    lib.console_clear()
+    lib.console_write(b'ABC')
+    assert cell(data, ho, 0, 1)[56:] == [0xFFFFFF]*8, 'automatic wrapping failed'
+    lib.console_write(b'\b \b')
+    assert cell(data, ho, 2, 0)[:56] == [bg]*56, 'backspace across wrap failed'
+    lib.console_clear()
+    lib.console_write(b'\b\t')
+    assert cell(data, ho, 1, 1)[56:] == [0xFFFFFF]*8, 'tab stop/wrapping failed'
+    # Repeated scrolling must never touch the title, partial bottom row or guards.
+    lib.console_write(b'line\n'*100)
+    assert list(data)[:1+40*29] == before[:1+40*29]
+    assert list(data)[1+64*29:] == before[1+64*29:]
+    pixels(data, ho)
+
+# Smallest viewport: scrolling has no source row. Reject zero-row viewports.
+data, ho = console_surface(width=8, height=48)
+lib.console_write(b'A\nB\n'*10)
+pixels(data, ho)
+data, ho = surface(width=24, height=47)
+before = list(data)
+lib.console_init(C.byref(ho))
+lib.console_write(b'ignored')
+assert list(data) == before
+lib.console_init(None)
+lib.console_write(b'ignored')
+lib.console_clear()
+print('PASS: console cursor, wrapping, backspace, tabs, scrolling, RGB/BGR and bounds')

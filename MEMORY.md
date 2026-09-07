@@ -19,7 +19,11 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   8x8, fond transparent, clipping, stride, remplacement des octets hors ASCII.
   Tests du vrai renderer sur mémoire gardée : `python3 tests/test_console.py`.
   Build et QEMU locaux PASS, **23/23**, titre « LumaOS Phase 9 » lisible.
-  Capture locale : `build/phase9-renderer.png`. Console interactive à poursuivre.
+  Capture locale : `build/phase9-renderer.png`.
+- Phase 9.2 : console sans allocation sous le titre (y=40), curseur souligné,
+  retours ligne/chariot, tabulations, backspace, wrap et scroll. Tests du code C
+  avec mémoire gardée PASS (RGB/BGR, viewport minimal, 100 lignes de scroll).
+  Initialisation visible dans QEMU + 23/23 PASS. Raccordement du shell à poursuivre.
 - Limites : clavier USB HID et matériel réel non validés. `make run` conserve
   encore le routage USB par défaut et le disque partagé IDE/NVMe ; utiliser la
   configuration CI pour les régressions jusqu'à harmonisation du lanceur.

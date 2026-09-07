@@ -387,6 +387,8 @@ void kernel_main(struct lumaos_handoff *ho) {
     }
 
     /* ---- Phase 5: scheduler + shell ---- */
+    console_init(ho);
+    console_write("LumaOS console ready\n");
     serial_puts("\n[*] Starting scheduler...\n");
     sched_init();
     task_create(task1_main, 1);

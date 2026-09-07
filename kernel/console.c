@@ -110,11 +110,6 @@ static int framebuffer_valid(const struct lumaos_handoff *ho) {
            !(ho->fb_pitch & 3) && ho->fb_pitch / 4 >= ho->fb_width;
 }
 
-void console_init(struct lumaos_handoff *ho) {
-    /* The positioned renderer has no state; text-console setup follows later. */
-    (void)ho;
-}
-
 void draw_char(struct lumaos_handoff *ho, char c, int x, int y, uint32_t color) {
     if (!framebuffer_valid(ho)) return;
     unsigned char ch = (unsigned char)c;
@@ -129,6 +124,84 @@ void draw_char(struct lumaos_handoff *ho, char c, int x, int y, uint32_t color) 
                 fb[(uint64_t)py * p + (uint64_t)px] = color;
         }
     }
+}
+
+static struct lumaos_handoff *console_fb;
+static uint32_t columns, rows, column, row, background;
+static const uint32_t foreground = 0x00FFFFFF;
+
+static void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
+    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)console_fb->framebuffer;
+    uint32_t stride = console_fb->fb_pitch / 4;
+    for (uint32_t dy = 0; dy < h; dy++)
+        for (uint32_t dx = 0; dx < w; dx++)
+            fb[(uint64_t)(y + dy) * stride + x + dx] = color;
+}
+
+/* The glyph's final row is blank, so hiding the underline loses no glyph data. */
+static void cursor(int visible) {
+    fill_rect(column * 8, CONSOLE_TOP + row * 8 + 7, 8, 1,
+              visible ? foreground : background);
+}
+
+static void scroll_if_needed(void) {
+    if (row < rows) return;
+    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)console_fb->framebuffer;
+    uint32_t stride = console_fb->fb_pitch / 4;
+    /* Forward copy is safe for this upward, overlapping move. Preserve pitch
+     * padding, the title and any incomplete cells at the screen edges. */
+    for (uint32_t y = CONSOLE_TOP; y < CONSOLE_TOP + (rows - 1) * 8; y++)
+        for (uint32_t x = 0; x < columns * 8; x++)
+            fb[(uint64_t)y * stride + x] = fb[(uint64_t)(y + 8) * stride + x];
+    row = rows - 1;
+    fill_rect(0, CONSOLE_TOP + row * 8, columns * 8, 8, background);
+}
+
+void console_clear(void) {
+    if (!console_fb) return;
+    fill_rect(0, CONSOLE_TOP, columns * 8, rows * 8, background);
+    column = row = 0;
+    cursor(1);
+}
+
+void console_init(struct lumaos_handoff *ho) {
+    console_fb = 0;
+    if (!framebuffer_valid(ho) || ho->fb_width < 8 ||
+        ho->fb_height < CONSOLE_TOP + 8 || ho->fb_width > INT32_MAX ||
+        ho->fb_height > INT32_MAX || ho->fb_format > LUMAOS_PIXEL_BGR) return;
+    console_fb = ho;
+    columns = ho->fb_width / 8;
+    rows = (ho->fb_height - CONSOLE_TOP) / 8;
+    background = ho->fb_format == LUMAOS_PIXEL_BGR ? 0x000F0F2D : 0x002D0F0F;
+    console_clear();
+}
+
+static void console_putc(unsigned char c) {
+    cursor(0);
+    if (c == '\n') {
+        column = 0;
+        row++;
+    } else if (c == '\r') {
+        column = 0;
+    } else if (c == '\b') {
+        if (column) column--;
+        else if (row) { row--; column = columns - 1; }
+    } else if (c == '\t') {
+        uint32_t spaces = 4 - column % 4;
+        while (spaces--) console_putc(' ');
+    } else if (c >= 32) {
+        fill_rect(column * 8, CONSOLE_TOP + row * 8, 8, 8, background);
+        draw_char(console_fb, (char)c, (int)(column * 8),
+                  (int)(CONSOLE_TOP + row * 8), foreground);
+        if (++column == columns) { column = 0; row++; }
+    }
+    scroll_if_needed();
+    cursor(1);
+}
+
+void console_write(const char *s) {
+    if (!console_fb || !s) return;
+    while (*s) console_putc((unsigned char)*s++);
 }
 
 void draw_string(struct lumaos_handoff *ho, const char *s, int x, int y, uint32_t color) {

@@ -388,7 +388,8 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 
 - [x] Phase 9.1: ASCII font renderer, transparent 8x8 cells, clipped writes
   (host guard/stride tests + QEMU screenshot + 23/23 local regressions).
-- [ ] Phase 9.2: text console, cursor, wrapping and scrolling
+- [x] Phase 9.2: text console, cursor, wrapping and scrolling
+  (host tests for bounds/RGB/BGR/scrolling; QEMU initialization + 23/23).
 - [ ] Phase 9.3: connect the existing Ring 3 shell to the framebuffer
 
 - [ ] Framebuffer console
