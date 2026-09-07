@@ -706,6 +706,8 @@ void xhci_init(void) {
     }
     serial_puts("\n");
 
+    serial_puts("[XHCI7b1] controller discovered\n");
+
     if (xhci_reset(op_base) != 0) {
         serial_puts("  [!] xHCI controller reset failed\n");
         return;

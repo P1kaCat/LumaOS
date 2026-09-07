@@ -7,11 +7,14 @@ LumaOS is a gaming-first operating system built from scratch for x86_64.
 ## CI/CD
 **Status: ✅ Operational**
 
-Local revalidation (2026-09-07, Windows, base `560248a`): build PASS after
-fixing a CP1252 diagnostic in the disk generator. QEMU reaches the shell;
-full regression FAIL: missing xHCI discovery marker and shell-exit cleanup
-marker, with injected shell commands not observed. Historical checkboxes below
-do not establish a complete pass for this local state. See `MEMORY.md`.
+Local revalidation (2026-09-07, Windows, base `6f0ba38` plus regression fix):
+`make clean` + `make build` PASS. QEMU 11.1.0 reaches the shell and executes
+`cat hello.txt`, `run prog.elf`, `exit`; all **23/23 unchanged markers** present,
+free pages **7624 before == 7624 final**. Restored the removed xHCI discovery
+marker and routed monitor input to PS/2 while retaining the USB enumeration
+fixture. Same CI injection script, TCP localhost transport instead of Unix socket.
+Ubuntu CI and physical/USB keyboard input are not validated by this local run.
+See `MEMORY.md` for the root cause, evidence and remaining limitations.
 
 - [x] GitHub Actions workflow (`.github/workflows/build.yml`)
 - [x] Build job: `make clean && make` on `ubuntu-22.04` with `clang + lld`
@@ -19,7 +22,7 @@ do not establish a complete pass for this local state. See `MEMORY.md`.
 - [x] QEMU boot test: headless `-display none`, `-no-reboot`
 - [x] Serial output capture via `-serial file:serial.log`
 - [x] Shell input injection via QEMU monitor (`sendkey` on unix socket)
-- [x] Boot marker verification (22 markers):
+- [x] Boot marker verification (23 markers):
   - `LumaOS`, `Kernel is alive!`, `[ATA]`, `[FAT32]`
   - `Phase 4+5 regression test passed`, `[VFS] test passed`, `[SYSCALL6] test passed`
   - `[CAT6] test passed`, `[INIT5] test passed`, `[EXEC12] test passed`

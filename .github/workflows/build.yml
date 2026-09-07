@@ -91,8 +91,12 @@ jobs:
           #   -no-reboot     : exit on triple fault instead of reboot loop
           #   -monitor unix  : QEMU monitor on unix socket for sendkey injection
           #   -serial file   : serial output to file (no buffering issues with tee)
+          # Bind the USB enumeration fixture to a named display so monitor
+          # sendkey (no display source) reaches the PS/2 keyboard. Create the
+          # display first: USB input binding happens when the device is created.
           qemu-system-x86_64 \
             -display none \
+            -vga none -device VGA,id=ci-video \
             -no-reboot \
             -monitor unix:/tmp/qemu-mon.sock,server,nowait \
             -drive if=pflash,format=raw,unit=0,file=tools/ovmf/OVMF_CODE.fd,readonly=on \
@@ -100,7 +104,7 @@ jobs:
             -drive file=fat:rw:build/efi_root,format=raw,media=disk \
             -drive file=build/disk.img,format=raw,if=ide,index=1 \
             -device qemu-xhci,id=xhci \
-            -device usb-kbd,bus=xhci.0 \
+            -device usb-kbd,bus=xhci.0,display=ci-video \
             -device ich9-ahci,id=ahci \
             -drive file=build/disk.img,if=none,id=nvm0,format=raw \
             -device nvme,serial=deadbeef,drive=nvm0 \
@@ -115,7 +119,8 @@ jobs:
           sleep 10
 
           # Inject shell commands via QEMU monitor sendkey
-          # sendkey injects PS/2 scan codes into the virtual keyboard controller
+          # With the routing above, sendkey reaches PS/2 (USB HID input is not
+          # implemented by LumaOS yet; USB enumeration remains tested).
           #
           # AZERTY key mapping notes:
           #   - 'a' on AZERTY is at QWERTY 'q' position (scancode 0x10)
