@@ -35,7 +35,7 @@ $(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h p
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
-$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h ../include/handoff.h
+$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h console.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
 

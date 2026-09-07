@@ -30,6 +30,9 @@ jobs:
       - name: Build kernel + bootloader + disk image
         run: make clean && make
 
+      - name: Test framebuffer renderer and console bounds
+        run: python3 tests/test_console.py
+
       - name: Verify build artifacts
         run: |
           echo "Checking artifacts:"
@@ -260,10 +263,18 @@ jobs:
           echo ""
           echo "All boot markers found — LumaOS boots correctly in QEMU."
 
+      - name: Test interactive framebuffer console
+        run: python3 tests/test_qemu_console.py
+
       - name: Upload serial log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: serial-output
-          path: serial.log
+          path: |
+            serial.log
+            build/console-serial.log
+            build/console-qemu.log
+            build/console-before.ppm
+            build/console-after.ppm
           retention-days: 7

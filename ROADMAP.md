@@ -390,9 +390,10 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
   (host guard/stride tests + QEMU screenshot + 23/23 local regressions).
 - [x] Phase 9.2: text console, cursor, wrapping and scrolling
   (host tests for bounds/RGB/BGR/scrolling; QEMU initialization + 23/23).
-- [ ] Phase 9.3: connect the existing Ring 3 shell to the framebuffer
+- [x] Phase 9.3: existing Ring 3 shell writes to framebuffer and serial
+  (local QEMU: help/backspace/pid/mem/cat/run/exit, scrolling, 23/23; CI pending).
 
-- [ ] Framebuffer console
+- [x] Framebuffer console (local host + QEMU validation, no USB HID claim)
 - [ ] 2D rendering
 - [ ] Keyboard and mouse input
 - [ ] Cursor

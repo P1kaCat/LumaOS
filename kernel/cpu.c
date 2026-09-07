@@ -9,6 +9,7 @@
 #include "vfs.h"
 #include "user.h"
 #include "apic.h"
+#include "console.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -381,6 +382,7 @@ void syscall_handler(struct registers *regs) {
     switch (regs->rax) {
         case 0: /* write(fd, buf, len) */
             serial_puts((const char *)(unsigned long)regs->rdi);
+            console_write((const char *)(uintptr_t)regs->rdi);
             regs->rax = regs->rsi;
             break;
         case 1: /* exit(status) */

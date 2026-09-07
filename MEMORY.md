@@ -23,7 +23,14 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
 - Phase 9.2 : console sans allocation sous le titre (y=40), curseur souligné,
   retours ligne/chariot, tabulations, backspace, wrap et scroll. Tests du code C
   avec mémoire gardée PASS (RGB/BGR, viewport minimal, 100 lignes de scroll).
-  Initialisation visible dans QEMU + 23/23 PASS. Raccordement du shell à poursuivre.
+  Initialisation visible dans QEMU + 23/23 PASS.
+- Phase 9.3 : syscall 0 conserve la sortie série et écrit aussi via `console_write`.
+  L'ABI et le shell Ring 3 existant sont réutilisés ; l'interrupt gate sérialise
+  les écritures. La console est initialisée avant init/shell, sans allocation.
+  `python3 tests/test_qemu_console.py` lance la configuration CI, vérifie les
+  23 attentes, Backspace, help/pid/mem/cat/run/exit, force le scroll et vérifie
+  les captures PPM. PASS local, pages **7637 == 7637** ; CI Phase 9 en attente.
+  Les tests renderer + console interactive sont ajoutés au workflow existant.
 - Limites : clavier USB HID et matériel réel non validés. `make run` conserve
   encore le routage USB par défaut et le disque partagé IDE/NVMe ; utiliser la
   configuration CI pour les régressions jusqu'à harmonisation du lanceur.
