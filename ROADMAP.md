@@ -393,6 +393,8 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Phase 9.3: existing Ring 3 shell writes to framebuffer and serial
   (local QEMU: help/backspace/pid/mem/cat/run/exit, scrolling, 23/23; CI pending).
 
+- [x] Interactive launcher keeps PS/2 keyboard available and uses separate NVMe image
+  (local QEMU profile: 23/23; CI validation pending).
 - [x] Framebuffer console (local host + QEMU validation, no USB HID claim)
 - [ ] 2D rendering
 - [ ] Keyboard and mouse input

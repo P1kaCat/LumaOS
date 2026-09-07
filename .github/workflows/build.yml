@@ -266,6 +266,9 @@ jobs:
       - name: Test interactive framebuffer console
         run: python3 tests/test_qemu_console.py
 
+      - name: Test interactive launcher configuration
+        run: python3 tests/test_qemu_console.py --profile run
+
       - name: Upload serial log on failure
         if: failure()
         uses: actions/upload-artifact@v4

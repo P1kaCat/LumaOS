@@ -30,15 +30,20 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   `python3 tests/test_qemu_console.py` lance la configuration CI, vérifie les
   23 attentes, Backspace, help/pid/mem/cat/run/exit, force le scroll et vérifie
   les captures PPM. PASS local, pages **7637 == 7637** ; CI Phase 9 en attente.
-  Les tests renderer + console interactive sont ajoutés au workflow existant.
-- Limites : clavier USB HID et matériel réel non validés. `make run` conserve
-  encore le routage USB par défaut et le disque partagé IDE/NVMe ; utiliser la
-  configuration CI pour les régressions jusqu'à harmonisation du lanceur.
+  Validation finale locale : `make clean`, build complet, tests mémoire PASS ;
+  profil CI **23/23**, pages **7624 == 7624** ; profil run **23/23**,
+  pages **7641 == 7641**. Les deux profils sont intégrés au workflow existant.
+- Lanceurs `make run` / `make debug` : copie NVMe séparée et souris USB
+  servant uniquement à l'énumération xHCI ; les touches restent sur PS/2.
+  Le profil `--profile run` du test reprend les arguments du Makefile.
+  Le runner supprime ses anciens journaux/captures avant le boot pour éviter
+  une fausse détection du shell suivie d'une injection prématurée.
+- Limites : clavier/souris USB HID et matériel réel non validés.
 - Réseau : marqueur d'initialisation présent mais aucune réponse ping établie ;
   le message UDP seul n'est pas une preuve de transmission effective.
-- Logs locaux ignorés par Git : `build/regression-serial.log`,
-  `build/diag-{usb,ps2,bound}.stderr`. Replay : `python3 build/replay_ci.py`
-  (fichiers supprimés par `make clean`).
+- Logs/captures locaux ignorés par Git : `build/console-serial.log`,
+  `build/console-qemu.log`, `build/console-{before,after}.ppm`.
+  Replay durable : `python3 tests/test_qemu_console.py` (profil CI par défaut).
 
 ---
 

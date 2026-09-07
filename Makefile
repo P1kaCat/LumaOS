@@ -19,6 +19,7 @@ BUILD_DIR := build
 OVMF_DIR  := tools/ovmf
 EFI_ROOT  := $(BUILD_DIR)/efi_root
 DISK_IMG  := $(BUILD_DIR)/disk.img
+NVME_IMG  := $(BUILD_DIR)/nvme.img
 
 # --- Toolchain ---
 CC      := clang
@@ -74,8 +75,11 @@ disk: userprogs
 	$(PYTHON) tools/create_disk.py $(DISK_IMG) $(USERPROG_ELF)
 
 # run : build + QEMU avec OVMF + data disk
+# USB mouse is an enumeration fixture; interactive keyboard stays on PS/2.
+# USB HID input is not implemented yet.
 run: build
 	@cp $(OVMF_DIR)/OVMF_VARS.fd $(BUILD_DIR)/ovmf_vars.fd
+	@cp $(DISK_IMG) $(NVME_IMG)
 	@echo "=== Launching QEMU + OVMF ==="
 	$(QEMU) \
 	  -drive if=pflash,format=raw,unit=0,file=$(OVMF_DIR)/OVMF_CODE.fd,readonly=on \
@@ -83,9 +87,9 @@ run: build
 	  -drive file=fat:rw:$(EFI_ROOT),format=raw,media=disk \
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
 	  -device qemu-xhci,id=xhci \
-	  -device usb-kbd,bus=xhci.0 \
+	  -device usb-mouse,bus=xhci.0 \
 	  -device ich9-ahci,id=ahci \
-	  -drive file=$(DISK_IMG),if=none,id=nvm0,format=raw \
+	  -drive file=$(NVME_IMG),if=none,id=nvm0,format=raw \
 	  -device nvme,serial=deadbeef,drive=nvm0 \
 	  -netdev user,id=net0 \
 	  -device e1000,netdev=net0 \
@@ -96,6 +100,7 @@ run: build
 # debug : build + QEMU freeze au boot (gdbstub, port 1234)
 debug: build
 	@cp $(OVMF_DIR)/OVMF_VARS.fd $(BUILD_DIR)/ovmf_vars.fd
+	@cp $(DISK_IMG) $(NVME_IMG)
 	@echo "=== Launching QEMU (debug mode, waiting for GDB on port 1234) ==="
 	$(QEMU) \
 	  -drive if=pflash,format=raw,unit=0,file=$(OVMF_DIR)/OVMF_CODE.fd,readonly=on \
@@ -103,9 +108,9 @@ debug: build
 	  -drive file=fat:rw:$(EFI_ROOT),format=raw,media=disk \
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
 	  -device qemu-xhci,id=xhci \
-	  -device usb-kbd,bus=xhci.0 \
+	  -device usb-mouse,bus=xhci.0 \
 	  -device ich9-ahci,id=ahci \
-	  -drive file=$(DISK_IMG),if=none,id=nvm0,format=raw \
+	  -drive file=$(NVME_IMG),if=none,id=nvm0,format=raw \
 	  -device nvme,serial=deadbeef,drive=nvm0 \
 	  -netdev user,id=net0 \
 	  -device e1000,netdev=net0 \

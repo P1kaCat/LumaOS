@@ -5,6 +5,7 @@ Uses the workflow's existing commands and all 23 expectations, with a localhost
 TCP monitor for Windows/Linux portability. Saves PPM screenshots and serial logs.
 """
 from pathlib import Path
+import argparse
 import os
 import re
 import shlex
@@ -16,9 +17,21 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
+parser = argparse.ArgumentParser()
+parser.add_argument('--profile', choices=('ci', 'run'), default='ci')
+profile = parser.parse_args().profile
 workflow = Path('.github/workflows/build.yml').read_text(encoding='utf-8')
 block = re.search(r'          qemu-system-x86_64 (\\\n[\s\S]+?) &\n', workflow)[1]
 args = shlex.split(block.replace('\\\n', ' '))
+if profile == 'run':
+    makefile = Path('Makefile').read_text(encoding='utf-8')
+    block = makefile.split('run: build', 1)[1].split('$(QEMU)', 1)[1].split('# debug', 1)[0]
+    for name, value in {'OVMF_DIR': 'tools/ovmf', 'BUILD_DIR': 'build',
+                        'EFI_ROOT': 'build/efi_root', 'DISK_IMG': 'build/disk.img',
+                        'NVME_IMG': 'build/nvme.img'}.items():
+        block = block.replace('$(' + name + ')', value)
+    args = shlex.split(block.replace('\\\n', ' '))
+    args += ['-display', 'none', '-no-reboot', '-monitor', 'none']
 with socket.socket() as probe:
     probe.bind(('127.0.0.1', 0))
     port = probe.getsockname()[1]
@@ -47,13 +60,17 @@ time.sleep(1)
 '''
 harness = harness.replace('# Type "exit" + Enter', extra + '\n# Type "exit" + Enter')
 
+serial = Path('build/console-serial.log')
+# Never let output from a previous run satisfy the readiness check.
+serial.unlink(missing_ok=True)
+for capture in ('build/console-before.ppm', 'build/console-after.ppm'):
+    Path(capture).unlink(missing_ok=True)
 with open('build/console-qemu.log', 'w') as log_file:
     process = subprocess.Popen(['qemu-system-x86_64'] + args, stdout=log_file,
                                stderr=log_file,
                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     try:
         deadline = time.monotonic() + 60
-        serial = Path('build/console-serial.log')
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise RuntimeError('QEMU exited: see build/console-qemu.log')
