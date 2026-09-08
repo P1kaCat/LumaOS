@@ -37,8 +37,8 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   Validation finale locale : `make clean`, build complet, tests mémoire PASS ;
   profil CI **23/23**, pages **7624 == 7624** ; profil run **23/23**,
   pages **7641 == 7641**. Les deux profils sont intégrés au workflow existant.
-- Lanceurs `make run` / `make debug` : copie NVMe séparée et souris USB
-  servant uniquement à l'énumération xHCI ; les touches restent sur PS/2.
+- Lanceurs `make run` / `make debug` : copie NVMe séparée et hub USB vide
+  servant uniquement à l'énumération xHCI ; clavier et souris restent sur PS/2.
   Le profil `--profile run` du test reprend les arguments du Makefile.
   Le runner supprime ses anciens journaux/captures avant le boot pour éviter
   une fausse détection du shell suivie d'une injection prématurée.
@@ -46,7 +46,22 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   existant : couleur RGB/BGR, remplissage, rectangle plein/contour, copie
   bornée avec chevauchement. Le boot et le scroll de console les réutilisent.
   Tests sur mémoire gardée, limites entières et 308 copies PASS ; QEMU local
-  **23/23**, pages **7636 == 7636**. CI de ce checkpoint en attente.
+  **23/23**, pages **7636 == 7636**. `c2d4fdf` complètement validé :
+  [CI](https://github.com/P1kaCat/LumaOS/actions/runs/34218591180) et
+  [xHCI](https://github.com/P1kaCat/LumaOS/actions/runs/34218591147) PASS.
+  Ubuntu : profils CI/run **23/23**, pages **7590 == 7590** / **7594 == 7594**.
+- Phase 9.5 : souris PS/2 standard trois octets, IRQ12 démasquée après
+  initialisation bornée ; IRQ1/IRQ12 dispatchent selon le statut du contrôleur.
+  Pointeur logiciel sans allocation, fond sauvegardé/restauré, clipping ;
+  la console masque le pointeur pendant ses écritures et son scroll.
+  Tests du décodeur et du rendu sur mémoire gardée PASS ; QEMU profil CI
+  **23/23**, déplacement/clic/relâchement/restauration exacte PASS,
+  Validation finale : nettoyage/build complet/tests mémoire PASS ; profil CI
+  pages **7622 == 7622**, profil run **7626 == 7626**, tous deux **23/23**
+  avec mouvement/clic/relâchement/restauration exacte. CI en attente.
+- Décision utilisateur du 2026-09-08 : le compositeur sera un **processus
+  utilisateur isolé**, avec surfaces bornées et interface d'événements ;
+  ne pas construire le gestionnaire de fenêtres dans le noyau.
 - Limites : clavier/souris USB HID et matériel réel non validés.
 - Réseau : marqueur d'initialisation présent mais aucune réponse ping établie ;
   le message UDP seul n'est pas une preuve de transmission effective.

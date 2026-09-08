@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "console.h"
 #include "framebuffer.h"
+#include "pointer.h"
 #include "../include/handoff.h"
 
 /* Hand-drawn 5x7 ASCII glyphs in 8x8 cells. Bit 7 is the leftmost pixel.
@@ -145,9 +146,11 @@ static void scroll_if_needed(void) {
 
 void console_clear(void) {
     if (!console_fb) return;
+    pointer_hide();
     fill_rect(0, CONSOLE_TOP, columns * 8, rows * 8, background);
     column = row = 0;
     cursor(1);
+    pointer_show();
 }
 
 void console_init(struct lumaos_handoff *ho) {
@@ -187,7 +190,9 @@ static void console_putc(unsigned char c) {
 
 void console_write(const char *s) {
     if (!console_fb || !s) return;
+    pointer_hide();
     while (*s) console_putc((unsigned char)*s++);
+    pointer_show();
 }
 
 void draw_string(struct lumaos_handoff *ho, const char *s, int x, int y, uint32_t color) {

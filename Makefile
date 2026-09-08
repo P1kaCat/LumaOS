@@ -75,7 +75,7 @@ disk: userprogs
 	$(PYTHON) tools/create_disk.py $(DISK_IMG) $(USERPROG_ELF)
 
 # run : build + QEMU avec OVMF + data disk
-# USB mouse is an enumeration fixture; interactive keyboard stays on PS/2.
+# Empty USB hub is an enumeration fixture; keyboard/mouse stay on PS/2.
 # USB HID input is not implemented yet.
 run: build
 	@cp $(OVMF_DIR)/OVMF_VARS.fd $(BUILD_DIR)/ovmf_vars.fd
@@ -87,7 +87,7 @@ run: build
 	  -drive file=fat:rw:$(EFI_ROOT),format=raw,media=disk \
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
 	  -device qemu-xhci,id=xhci \
-	  -device usb-mouse,bus=xhci.0 \
+	  -device usb-hub,bus=xhci.0 \
 	  -device ich9-ahci,id=ahci \
 	  -drive file=$(NVME_IMG),if=none,id=nvm0,format=raw \
 	  -device nvme,serial=deadbeef,drive=nvm0 \
@@ -108,7 +108,7 @@ debug: build
 	  -drive file=fat:rw:$(EFI_ROOT),format=raw,media=disk \
 	  -drive file=$(DISK_IMG),format=raw,if=ide,index=1 \
 	  -device qemu-xhci,id=xhci \
-	  -device usb-mouse,bus=xhci.0 \
+	  -device usb-hub,bus=xhci.0 \
 	  -device ich9-ahci,id=ahci \
 	  -drive file=$(NVME_IMG),if=none,id=nvm0,format=raw \
 	  -device nvme,serial=deadbeef,drive=nvm0 \

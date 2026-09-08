@@ -14,14 +14,17 @@ OUT.mkdir(parents=True, exist_ok=True)
 lib_path = OUT / ('console.dll' if os.name == 'nt' else 'console.so')
 command = ['clang', '-ffreestanding', '-fno-stack-protector', '-O2',
            '-Wall', '-Wextra', '-Werror', '-shared', '-nostdlib',
-           str(ROOT / 'kernel/console.c'), str(ROOT / 'kernel/framebuffer.c'), '-o', str(lib_path)]
+           str(ROOT / 'kernel/console.c'), str(ROOT / 'kernel/framebuffer.c'),
+           str(ROOT / 'kernel/pointer.c'), str(ROOT / 'kernel/mouse.c'), '-o', str(lib_path)]
 if os.name == 'nt':
     command += ['-fuse-ld=lld', '-Wl,/noentry', '-Wl,/export:draw_char',
                 '-Wl,/export:draw_string', '-Wl,/export:console_init',
                 '-Wl,/export:console_clear', '-Wl,/export:console_write',
                 '-Wl,/export:fb_fill_rect', '-Wl,/export:fb_fill',
                 '-Wl,/export:fb_outline', '-Wl,/export:fb_copy_rect',
-                '-Wl,/export:fb_color']
+                '-Wl,/export:fb_color', '-Wl,/export:pointer_init',
+                '-Wl,/export:pointer_hide', '-Wl,/export:pointer_show',
+                '-Wl,/export:pointer_move', '-Wl,/export:mouse_decode']
 else:
     command += ['-fPIC']
 subprocess.run(command, check=True)
@@ -235,3 +238,60 @@ for field, value in [('framebuffer', 0), ('framebuffer', 2**64-4),
     lib.fb_copy_rect(C.byref(ho), 0, 0, 1, 1, 10, 10)
     assert list(data) == before
 print('PASS: 2D fills, outlines, clipping, integer limits and 308 overlapping copies')
+
+
+class Decoder(C.Structure):
+    _fields_ = [('packet', C.c_uint8*3), ('count', C.c_uint8)]
+
+class MouseEvent(C.Structure):
+    _fields_ = [('dx', C.c_int32), ('dy', C.c_int32), ('buttons', C.c_uint8)]
+
+lib.mouse_decode.argtypes = [C.POINTER(Decoder), C.c_uint8, C.POINTER(MouseEvent)]
+lib.mouse_decode.restype = C.c_int
+state, event = Decoder(), MouseEvent()
+assert lib.mouse_decode(C.byref(state), 0, C.byref(event)) == 0
+for dx, dy, buttons in [(80, -40, 0), (-1, 1, 1), (-256, 255, 7), (255, -256, 2)]:
+    flags = 8 | buttons | (0x10 if dx < 0 else 0) | (0x20 if dy < 0 else 0)
+    results = [lib.mouse_decode(C.byref(state), b, C.byref(event))
+               for b in (flags, dx & 255, dy & 255)]
+    assert results == [0, 0, 1]
+    assert (event.dx, event.dy, event.buttons) == (dx, -dy, buttons)
+for b in (0xCB, 255, 255):
+    lib.mouse_decode(C.byref(state), b, C.byref(event))
+assert (event.dx, event.dy, event.buttons) == (0, 0, 3)
+
+lib.pointer_init.argtypes = [C.POINTER(Handoff)]
+lib.pointer_hide.argtypes = []
+lib.pointer_show.argtypes = []
+lib.pointer_move.argtypes = [C.c_int32, C.c_int32, C.c_uint8]
+for width, height, stride in [(64, 80, 69), (1, 1, 4), (12, 16, 15)]:
+    data, ho = surface(width, height, stride)
+    original = list(data)
+    lib.pointer_init(C.byref(ho))
+    visible = list(data)
+    assert visible != original
+    lib.pointer_show()
+    assert list(data) == visible, 'double show corrupted saved background'
+    for dx, dy, buttons in [(3, 4, 0), (-2**31, -2**31, 1),
+                            (2**31-1, 2**31-1, 2), (0, 0, 0)]:
+        lib.pointer_move(dx, dy, buttons)
+        pixels(data, ho)
+        lib.pointer_hide()
+        assert list(data) == original, 'moving/clipped pointer damaged background'
+        lib.pointer_show()
+    lib.pointer_init(None)
+    assert list(data) == original
+
+# The pointer must hide before text/scroll and save the updated background.
+data, ho = surface(64, 80, 69)
+lib.console_init(C.byref(ho))
+lib.pointer_init(C.byref(ho))
+lib.console_write(b'line of text\n'*30)
+lib.pointer_hide()
+actual = list(data)
+lib.pointer_init(None)
+other, other_ho = surface(64, 80, 69)
+lib.console_init(C.byref(other_ho))
+lib.console_write(b'line of text\n'*30)
+assert actual == list(other), 'pointer left a trail or restored stale console pixels'
+print('PASS: PS/2 packets, signed motion, buttons, overflow and pointer restoration')

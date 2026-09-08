@@ -280,4 +280,5 @@ jobs:
             build/console-qemu.log
             build/console-before.ppm
             build/console-after.ppm
+            build/pointer-*.ppm
           retention-days: 7

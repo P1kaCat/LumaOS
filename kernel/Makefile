@@ -20,7 +20,7 @@ KERNEL_OBJS := $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o \
                $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o \
                $(BUILD_DIR)/user.o $(BUILD_DIR)/init_code.o $(BUILD_DIR)/shell_code.o $(BUILD_DIR)/ata.o \
                $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o $(BUILD_DIR)/pci.o $(BUILD_DIR)/acpi.o $(BUILD_DIR)/apic.o \
-               $(BUILD_DIR)/xhci.o $(BUILD_DIR)/ahci.o $(BUILD_DIR)/nvme.o $(BUILD_DIR)/e1000.o $(BUILD_DIR)/net.o $(BUILD_DIR)/audio.o $(BUILD_DIR)/console.o $(BUILD_DIR)/framebuffer.o
+               $(BUILD_DIR)/xhci.o $(BUILD_DIR)/ahci.o $(BUILD_DIR)/nvme.o $(BUILD_DIR)/e1000.o $(BUILD_DIR)/net.o $(BUILD_DIR)/audio.o $(BUILD_DIR)/console.o $(BUILD_DIR)/framebuffer.o $(BUILD_DIR)/mouse.o $(BUILD_DIR)/ps2_mouse.o $(BUILD_DIR)/pointer.o
 
 .PHONY: all clean
 
@@ -31,11 +31,11 @@ $(KERNEL_BIN): $(KERNEL_OBJS) linker.ld
 	$(LD) $(KERNEL_LDFLAGS) -o $@ $(KERNEL_OBJS)
 	@echo "Kernel built: $@"
 
-$(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h pci.h acpi.h apic.h xhci.h ahci.h nvme.h net.h audio.h console.h framebuffer.h ../include/handoff.h
+$(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h pci.h acpi.h apic.h xhci.h ahci.h nvme.h net.h audio.h console.h framebuffer.h pointer.h mouse.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
-$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h console.h ../include/handoff.h
+$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h console.h mouse.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
 
@@ -119,10 +119,22 @@ $(BUILD_DIR)/audio.o: audio.c audio.h pci.h cpu.h mem.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c audio.c -o $@
 
-$(BUILD_DIR)/console.o: console.c console.h framebuffer.h ../include/handoff.h
+$(BUILD_DIR)/console.o: console.c console.h framebuffer.h pointer.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c console.c -o $@
 
 $(BUILD_DIR)/framebuffer.o: framebuffer.c framebuffer.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c framebuffer.c -o $@
+
+$(BUILD_DIR)/mouse.o: mouse.c mouse.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c mouse.c -o $@
+
+$(BUILD_DIR)/ps2_mouse.o: ps2_mouse.c mouse.h pointer.h cpu.h apic.h ../include/handoff.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c ps2_mouse.c -o $@
+
+$(BUILD_DIR)/pointer.o: pointer.c pointer.h framebuffer.h ../include/handoff.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c pointer.c -o $@

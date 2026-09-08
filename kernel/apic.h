@@ -78,6 +78,8 @@ void apic_eoi(uint8_t irq);
 
 /* Returns 1 if APIC is active (LAPIC enabled), 0 if using PIC. */
 int apic_is_active(void);
+/* Unmask an already routed ISA interrupt (or legacy PIC fallback). */
+int apic_enable_isa_irq(uint8_t irq);
 
 /* Get the LAPIC ID of the current CPU. */
 uint8_t lapic_get_id(void);

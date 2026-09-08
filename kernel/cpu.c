@@ -10,6 +10,7 @@
 #include "user.h"
 #include "apic.h"
 #include "console.h"
+#include "mouse.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -290,9 +291,19 @@ void exception_handler(uint64_t int_no, uint64_t err_code) {
 void irq_default_handler(uint8_t irq) {
     if (irq == 0) {
         sched_tick();
-    } else if (irq == 1) {
-        /* Phase 5: keyboard scancode → ASCII → ring buffer */
+    } else if (irq == 1 || irq == 12) {
+        uint8_t status = inb(0x64);
+        if (!(status & 1)) { apic_eoi(irq); return; }
         uint8_t sc = inb(0x60);
+        if (status & 0xC0) {
+            if (status & 0x20) ps2_mouse_reset_packet();
+            apic_eoi(irq); return;
+        }
+        if (status & 0x20) {
+            ps2_mouse_byte(sc);
+            apic_eoi(irq); return;
+        }
+        /* Phase 5: keyboard scancode → ASCII → ring buffer */
         if (sc == 0x2A || sc == 0x36) {
             /* Left Shift or Right Shift pressed */
             shift_pressed = 1;

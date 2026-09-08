@@ -176,6 +176,21 @@ static void ioapic_set_redirect(uint8_t gsi, uint8_t vector,
     ioapic_write((uint8_t)(reg + 1), high);
 }
 
+int apic_enable_isa_irq(uint8_t irq) {
+    if (irq >= 16 || irq == 2) return 0;
+    if (apic_active) {
+        uint32_t gsi = isa_irq_to_gsi(irq);
+        if (gsi >= (uint32_t)ioapic_max_redir()) return 0;
+        uint8_t reg = (uint8_t)(IOAPIC_REG_REDTBL + gsi * 2);
+        ioapic_write(reg, ioapic_read(reg) & ~IOAPIC_REDIR_MASKED);
+    } else {
+        uint16_t port = irq < 8 ? 0x21 : 0xA1;
+        outb(port, inb(port) & ~(1u << (irq & 7)));
+        if (irq >= 8) outb(0x21, inb(0x21) & ~4u);
+    }
+    return 1;
+}
+
 /* ===== Main init ===== */
 
 void apic_init(void) {

@@ -397,12 +397,14 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
   (Windows and Ubuntu QEMU profiles: 23/23, no page leak).
 - [x] Framebuffer console (host + Windows/Ubuntu QEMU validated, no USB HID claim)
 - [x] Phase 9.4: CPU 2D fills, rectangle outlines and overlapping rectangle copies
-  (guarded host tests + existing console scroll + 23/23 local; CI pending).
+  (guarded host tests + existing console scroll + 23/23 local + Ubuntu CI PASS on `c2d4fdf`).
 - [ ] 2D rendering (lines, sprites and application surfaces remain)
-- [ ] Keyboard and mouse input
-- [ ] Cursor
+- [x] PS/2 keyboard and three-button mouse input (local QEMU; CI pending)
+- [ ] USB HID keyboard/mouse input
+- [x] Software pointer with background restoration (local host + QEMU; CI pending)
+- [ ] Safe graphics surface and input interface for Ring 3
 - [ ] Windows
-- [ ] Compositor
+- [ ] Isolated userspace compositor (user-approved architecture, 2026-09-08)
 - [ ] LumaOS desktop
 
 ---
