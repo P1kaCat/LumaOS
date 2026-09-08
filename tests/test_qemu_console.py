@@ -1,8 +1,9 @@
 """Replay the CI configuration and exercise the framebuffer shell.
 
 Run after make build: python3 tests/test_qemu_console.py
-Uses the workflow's existing commands and all 23 expectations, with a localhost
-TCP monitor for Windows/Linux portability. Saves PPM screenshots and serial logs.
+Uses the workflow's existing commands and all 23 expectations, plus Ring 3
+graphics isolation checks, with a localhost TCP monitor for Windows/Linux
+portability. Saves PPM screenshots and serial logs.
 """
 from pathlib import Path
 import argparse
@@ -28,9 +29,7 @@ args = shlex.split(block.replace('\\\n', ' '))
 if profile == 'run':
     makefile = Path('Makefile').read_text(encoding='utf-8')
     block = makefile.split('run: build', 1)[1].split('$(QEMU)', 1)[1].split('# debug', 1)[0]
-    for name, value in {'OVMF_DIR': 'tools/ovmf', 'BUILD_DIR': 'build',
-                        'EFI_ROOT': 'build/efi_root', 'DISK_IMG': 'build/disk.img',
-                        'NVME_IMG': 'build/nvme.img'}.items():
+    for name, value in {'OVMF_DIR': 'tools/ovmf', 'BUILD_DIR': 'build', 'EFI_ROOT': 'build/efi_root', 'DISK_IMG': 'build/disk.img', 'NVME_IMG': 'build/nvme.img'}.items():
         block = block.replace('$(' + name + ')', value)
     args = shlex.split(block.replace('\\\n', ' '))
     args += ['-display', 'none', '-no-reboot', '-monitor', 'none']
@@ -113,9 +112,13 @@ assert len(markers) == 23
 missing = [marker for marker in markers if marker not in log]
 assert not missing, missing
 assert '> cat hello.txt\n' in log and '> run prog.elf\n' in log
-assert log.count('Hello from loaded program!') >= (8 if options.repeat_exec else 2), 'repeated exec failed'
-assert log.count('[GFX9] info query and pointer checks passed') >= 2
+expected_execs = 8 if options.repeat_exec else 2
+assert log.count('Hello from loaded program!') >= expected_execs, 'repeated exec failed'
+assert log.count('[GFX9] info query and pointer checks passed') >= expected_execs
+assert log.count('[GFX9] surface presentation and ownership checks passed') >= expected_execs
+assert log.count('[GFX9] non-owner presentation rejected') >= expected_execs
 assert '[GFX9] info query FAILED' not in log
+assert '[GFX9] graphics surface test FAILED' not in log
 assert 'helx\b \bp\nCommands:' in log, 'backspace command did not execute'
 assert log.count('Commands:') >= 11 and 'PID: 3' in log
 assert '> mem\nFree pages:' in log
@@ -140,6 +143,7 @@ assert before[:w*40*3] == after[:w*40*3], 'scroll overwrote the boot title'
 assert before[w*40*3:] != after[w*40*3:], 'shell output did not update the screen'
 assert after[w*40*3:].count(b'\xff\xff\xff') > 1000, 'screen output missing'
 print(f'PASS: 23/23 markers; pages {counts[1]} == {counts[2]}')
+print('PASS: Ring 3 graphics info, isolated surface presentation and ownership')
 print('PASS: framebuffer output, backspace, help, pid, mem, scroll and preserved title')
 
 assert '[MOUSE9] PS/2 three-byte input enabled' in log
