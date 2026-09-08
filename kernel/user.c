@@ -12,6 +12,7 @@
  */
 #include <stdint.h>
 #include "cpu.h"
+#include "user.h"
 #include "sched.h"
 #include "mem.h"
 #include "vfs.h"
@@ -38,7 +39,30 @@ extern const unsigned char shell_code_end[];
 #define USER_ZONE_START  0x800000ULL
 #define USER_ZONE_END    0x1400000ULL
 
-static int next_proc_idx = 0;
+static uint64_t address_spaces[MAX_PROCS];
+
+static uint64_t allocate_address_space(uint64_t initial_phys) {
+    for (int i = 0; i < MAX_PROCS; i++) {
+        if (!address_spaces[i]) {
+            address_spaces[i] = create_user_pml4(i, initial_phys);
+            return address_spaces[i];
+        }
+    }
+    return 0;
+}
+
+void user_release_address_space(uint64_t cr3) {
+    if (!cr3) return;
+    for (int i = 0; i < MAX_PROCS; i++) {
+        if (address_spaces[i] == cr3) {
+            /* free_user_pages frees complete PTs, skipping static 2MB mappings. */
+            free_user_pages(cr3, USER_CODE_ADDR, USER_STACK_TOP);
+            free_user_pages(cr3, USER_HEAP_BASE, USER_HEAP_MAX);
+            address_spaces[i] = 0;
+            return;
+        }
+    }
+}
 
 static void copy_code(uint64_t phys_addr, const unsigned char *start, const unsigned char *end) {
     uint8_t *dst = (uint8_t *)(unsigned long)phys_addr;
@@ -51,7 +75,7 @@ void user_init(void) {
     serial_puts("[*] Creating init process...\n");
 
     copy_code(INIT_PHYS, init_code_start, init_code_end);
-    uint64_t cr3 = create_user_pml4(next_proc_idx++, INIT_PHYS);
+    uint64_t cr3 = allocate_address_space(INIT_PHYS);
     uint64_t stack_page = alloc_page();
     map_page(cr3, USER_STACK_TOP - PAGE_SIZE, stack_page,
              PTE_PRESENT | PTE_WRITABLE | PTE_USER);
@@ -63,8 +87,6 @@ void user_init(void) {
 int spawn_shell(void) {
     serial_puts("[*] Spawning shell process...\n");
 
-    if (next_proc_idx >= MAX_PROCS) return -1;
-
     /* Allocate a 4KB page for shell code */
     uint64_t code_phys = alloc_page();
     if (!code_phys) return -1;
@@ -72,7 +94,7 @@ int spawn_shell(void) {
     copy_code(code_phys, shell_code_start, shell_code_end);
 
     /* Create page tables — no 2MB code page (pass 0) */
-    uint64_t cr3 = create_user_pml4(next_proc_idx++, 0);
+    uint64_t cr3 = allocate_address_space(0);
     if (!cr3) {
         free_page(code_phys);
         return -1;
@@ -82,19 +104,25 @@ int spawn_shell(void) {
     if (map_page(cr3, USER_CODE_ADDR, code_phys,
                  PTE_PRESENT | PTE_WRITABLE | PTE_USER) != 0) {
         free_page(code_phys);
+        user_release_address_space(cr3);
         return -1;
     }
 
     /* Allocate and map stack page */
     uint64_t stack_page = alloc_page();
     if (!stack_page) {
-        free_page(code_phys);
+        user_release_address_space(cr3);
         return -1;
     }
-    map_page(cr3, USER_STACK_TOP - PAGE_SIZE, stack_page,
-             PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+    if (map_page(cr3, USER_STACK_TOP - PAGE_SIZE, stack_page,
+                 PTE_PRESENT | PTE_WRITABLE | PTE_USER) != 0) {
+        free_page(stack_page);
+        user_release_address_space(cr3);
+        return -1;
+    }
 
     int pid = proc_create_user(USER_CODE_ADDR, USER_STACK_TOP, cr3, USER_HEAP_BASE);
+    if (pid < 0) { user_release_address_space(cr3); return -1; }
     serial_puts("[+] Shell process spawned\n");
     return pid;
 }
@@ -321,11 +349,6 @@ int spawn_file(const char *path) {
     serial_puts(path);
     serial_puts("\n");
 
-    if (next_proc_idx >= MAX_PROCS) {
-        serial_puts("[!] spawn_file: max processes reached\n");
-        return -1;
-    }
-
     /* Open file via kernel-space VFS */
     int fd = vfs_open(path);
     if (fd < 0) {
@@ -376,7 +399,7 @@ int spawn_file(const char *path) {
     }
 
     /* Create process page tables (no 2MB code page — segments mapped individually) */
-    uint64_t cr3 = create_user_pml4(next_proc_idx++, 0);
+    uint64_t cr3 = allocate_address_space(0);
     if (!cr3) {
         serial_puts("[!] ELF: create_user_pml4 failed\n");
         return -1;
@@ -395,6 +418,7 @@ int spawn_file(const char *path) {
             serial_puts("[!] ELF: segment load failed (phdr #");
             serial_putu(i);
             serial_puts(")\n");
+            user_release_address_space(cr3);
             return -1;
         }
         seg_count++;
@@ -402,6 +426,7 @@ int spawn_file(const char *path) {
 
     if (seg_count == 0) {
         serial_puts("[!] ELF: no PT_LOAD segments\n");
+        user_release_address_space(cr3);
         return -1;
     }
 
@@ -413,15 +438,20 @@ int spawn_file(const char *path) {
     uint64_t stack_page = alloc_page();
     if (!stack_page) {
         serial_puts("[!] ELF: stack alloc failed\n");
+        user_release_address_space(cr3);
         return -1;
     }
-    map_page(cr3, USER_STACK_TOP - PAGE_SIZE, stack_page,
-             PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+    if (map_page(cr3, USER_STACK_TOP - PAGE_SIZE, stack_page,
+                 PTE_PRESENT | PTE_WRITABLE | PTE_USER) != 0) {
+        free_page(stack_page);
+        user_release_address_space(cr3);
+        return -1;
+    }
 
     /* Create user process — RIP = ELF entry point */
     int pid = proc_create_user(ehdr->e_entry, USER_STACK_TOP, cr3, USER_HEAP_BASE);
     if (pid < 0) {
-        free_page(stack_page);
+        user_release_address_space(cr3);
         serial_puts("[!] ELF: proc_create_user failed\n");
         return -1;
     }

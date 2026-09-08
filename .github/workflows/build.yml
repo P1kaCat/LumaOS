@@ -267,7 +267,7 @@ jobs:
         run: python3 tests/test_qemu_console.py
 
       - name: Test interactive launcher configuration
-        run: python3 tests/test_qemu_console.py --profile run
+        run: python3 tests/test_qemu_console.py --profile run --repeat-exec
 
       - name: Upload serial log on failure
         if: failure()

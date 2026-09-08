@@ -6,6 +6,7 @@
 #include "sched.h"
 #include "cpu.h"
 #include "mem.h"
+#include "user.h"
 
 static struct task tasks[MAX_TASKS];
 static int num_tasks = 0;
@@ -70,8 +71,19 @@ void task_create(void (*entry)(void), int id) {
 }
 
 int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3, uint64_t heap_base) {
-    if (num_tasks >= MAX_TASKS) return -1;
-    struct task *t = &tasks[num_tasks++];
+    struct task *t = 0;
+    for (int i = 1; i < num_tasks; i++) {
+        if (tasks[i].is_user && tasks[i].state == PROC_TERMINATED &&
+            &tasks[i] != sched_current &&
+            (!sched_switch_pending || &tasks[i] != sched_next)) {
+            t = &tasks[i];
+            break;
+        }
+    }
+    if (!t) {
+        if (num_tasks >= MAX_TASKS) return -1;
+        t = &tasks[num_tasks++];
+    }
     t->pid = next_pid++;
     t->id = t->pid;
     t->state = PROC_READY;
@@ -102,14 +114,8 @@ void proc_terminate(int pid) {
     for (int i = 0; i < num_tasks; i++) {
         if (tasks[i].pid == pid && tasks[i].is_user) {
             tasks[i].state = PROC_TERMINATED;
-            if (tasks[i].cr3) {
-                free_user_pages(tasks[i].cr3,
-                    0x800000ULL, 0x801000ULL);   /* code page (4KB only, skips 2MB) */
-                free_user_pages(tasks[i].cr3,
-                    USER_STACK_BASE, tasks[i].user_stack_top);
-                free_user_pages(tasks[i].cr3,
-                    USER_HEAP_BASE, USER_HEAP_MAX);
-            }
+            user_release_address_space(tasks[i].cr3);
+            tasks[i].cr3 = 0;
             return;
         }
     }

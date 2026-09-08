@@ -403,6 +403,8 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [ ] USB HID keyboard/mouse input
 - [x] Software pointer with background restoration (host + Windows/Ubuntu QEMU PASS on `a834ba3`)
 - [x] Phase 9.6: validated Ring 3 graphics-info query (local QEMU + pointer checks)
+- [x] Reusable process/address-space slots for compositor relaunch
+  (eight sequential ELF executions, 23/23 and no leak locally; CI pending).
 - [ ] Safe graphics surface and input interface for Ring 3
 - [ ] Windows
 - [ ] Isolated userspace compositor (user-approved architecture, 2026-09-08)

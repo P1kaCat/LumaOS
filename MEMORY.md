@@ -70,6 +70,13 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   Le programme ELF existant vérifie depuis Ring 3 le cas valide, la taille,
   un pointeur noyau, une page texte en lecture seule et une limite de page.
   Build/QEMU local **23/23**, pages **7620 == 7620**. CI du checkpoint à venir.
+- Prérequis du compositeur : emplacements de processus/CR3 réutilisables.
+  L'ancien compteur monotone épuisait quatre espaces d'adressage après la
+  séquence de démonstration. Reproduction : six exec supplémentaires échouaient.
+  Le pool conserve la limite simultanée de quatre, libère les pages/slots à
+  la terminaison et sur échec du chargement ; le scheduler réutilise les tâches
+  terminées sans écraser la pile en cours. Huit exec QEMU PASS, **23/23**,
+  pages **7620 == 7620**. Le profil CI run teste `--repeat-exec`.
 - Limites : clavier/souris USB HID et matériel réel non validés.
 - Réseau : marqueur d'initialisation présent mais aucune réponse ping établie ;
   le message UDP seul n'est pas une preuve de transmission effective.

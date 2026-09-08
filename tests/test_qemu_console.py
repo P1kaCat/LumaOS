@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 parser = argparse.ArgumentParser()
 parser.add_argument('--profile', choices=('ci', 'run'), default='ci')
-profile = parser.parse_args().profile
+parser.add_argument('--repeat-exec', action='store_true')
+options = parser.parse_args()
+profile = options.profile
 workflow = Path('.github/workflows/build.yml').read_text(encoding='utf-8')
 block = re.search(r'          qemu-system-x86_64 (\\\n[\s\S]+?) &\n', workflow)[1]
 args = shlex.split(block.replace('\\\n', ' '))
@@ -53,7 +55,7 @@ for key in ['h', 'e', 'l', 'x', 'backspace', 'p', 'ret']:
 for command in ['help'] * 10 + ['pid', 'mem']:
     for key in list(command) + ['ret']:
         # m is at QWERTY semicolon's physical position on AZERTY.
-        send_key('semicolon' if key == 'm' else key)
+        send_key({'m': 'semicolon', ' ': 'spc', '.': 'dot'}.get(key, key))
 time.sleep(1)
 s.sendall(b'screendump build/console-after.ppm\\n')
 time.sleep(1)
@@ -66,6 +68,9 @@ for command in ['mouse_move 80 40', 'screendump build/pointer-moved.ppm',
     time.sleep(0.4)
     s.recv(4096)
 '''
+if options.repeat_exec:
+    extra = extra.replace("['help'] * 10 + ['pid', 'mem']",
+                          "['run prog.elf'] * 6 + ['help'] * 10 + ['pid', 'mem']")
 harness = harness.replace('# Type "exit" + Enter', extra + '\n# Type "exit" + Enter')
 
 serial = Path('build/console-serial.log')
@@ -108,7 +113,7 @@ assert len(markers) == 23
 missing = [marker for marker in markers if marker not in log]
 assert not missing, missing
 assert '> cat hello.txt\n' in log and '> run prog.elf\n' in log
-assert log.count('Hello from loaded program!') >= 2
+assert log.count('Hello from loaded program!') >= (8 if options.repeat_exec else 2), 'repeated exec failed'
 assert log.count('[GFX9] info query and pointer checks passed') >= 2
 assert '[GFX9] info query FAILED' not in log
 assert 'helx\b \bp\nCommands:' in log, 'backspace command did not execute'
@@ -154,3 +159,6 @@ assert all(pressed[i*3:i*3+3] == moved[i*3:i*3+3]
            for i in range(w*h) if not
            (w//2+80 <= i%w < w//2+92 and h//2+40 <= i//w < h//2+56))
 print('PASS: PS/2 mouse motion, click/release and exact framebuffer restoration')
+
+if options.repeat_exec:
+    print('PASS: 8 ELF executions with reused process/address-space slots')
