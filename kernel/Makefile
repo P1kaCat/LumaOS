@@ -1,3 +1,122 @@
+# kernel/Makefile — LumaOS Kernel (Phase 6 + 7)
+# Prérequis : LLVM/Clang + LLD. Pas besoin de NASM.
+
+BUILD_DIR := ../build/kernel
+CC := clang
+LD := ld.lld
+INCLUDE := -I../include
+
+KERNEL_CFLAGS := --target=x86_64-unknown-none -ffreestanding -nostdlib \
+                 -O2 -Wall -Wextra -mno-red-zone -fno-pic -fno-stack-protector \
+                 $(INCLUDE)
+
+ASM_FLAGS := --target=x86_64-unknown-none -ffreestanding -nostdlib
+
+KERNEL_LDFLAGS := -T linker.ld -nostdlib --oformat elf64-x86-64
+
+KERNEL_BIN := $(BUILD_DIR)/kernel.elf
+
+KERNEL_OBJS := $(BUILD_DIR)/boot.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/cpu.o \
+               $(BUILD_DIR)/isr.o $(BUILD_DIR)/mem.o $(BUILD_DIR)/sched.o \
+               $(BUILD_DIR)/user.o $(BUILD_DIR)/init_code.o $(BUILD_DIR)/shell_code.o $(BUILD_DIR)/ata.o \
+               $(BUILD_DIR)/fat32.o $(BUILD_DIR)/vfs.o $(BUILD_DIR)/pci.o $(BUILD_DIR)/acpi.o $(BUILD_DIR)/apic.o \
+               $(BUILD_DIR)/xhci.o $(BUILD_DIR)/ahci.o $(BUILD_DIR)/nvme.o $(BUILD_DIR)/e1000.o $(BUILD_DIR)/net.o $(BUILD_DIR)/audio.o $(BUILD_DIR)/console.o $(BUILD_DIR)/framebuffer.o $(BUILD_DIR)/mouse.o $(BUILD_DIR)/ps2_mouse.o $(BUILD_DIR)/pointer.o $(BUILD_DIR)/graphics.o
+
+.PHONY: all clean
+
+all: $(KERNEL_BIN)
+
+$(KERNEL_BIN): $(KERNEL_OBJS) linker.ld
+	@mkdir -p $(BUILD_DIR)
+	$(LD) $(KERNEL_LDFLAGS) -o $@ $(KERNEL_OBJS)
+	@echo "Kernel built: $@"
+
+$(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h pci.h acpi.h apic.h xhci.h ahci.h nvme.h net.h audio.h console.h framebuffer.h pointer.h mouse.h graphics.h ../include/graphics_abi.h ../include/handoff.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
+
+$(BUILD_DIR)/cpu.o: cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h console.h mouse.h graphics.h ../include/graphics_abi.h ../include/handoff.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
+
+$(BUILD_DIR)/isr.o: isr.S cpu.h sched.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(ASM_FLAGS) -c isr.S -o $@
+
+$(BUILD_DIR)/mem.o: mem.c mem.h ../include/handoff.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c mem.c -o $@
+
+$(BUILD_DIR)/sched.o: sched.c sched.h cpu.h mem.h user.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c sched.c -o $@
+
+$(BUILD_DIR)/user.o: user.c user.h cpu.h sched.h mem.h vfs.h elf.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c user.c -o $@
+
+$(BUILD_DIR)/init_code.o: init_code.S
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(ASM_FLAGS) -c init_code.S -o $@
+
+$(BUILD_DIR)/shell_code.o: shell_code.S
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(ASM_FLAGS) -c shell_code.S -o $@
+
+$(BUILD_DIR)/boot.o: boot.S
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(ASM_FLAGS) -c boot.S -o $@
+
+$(BUILD_DIR)/ata.o: ata.c ata.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c ata.c -o $@
+
+$(BUILD_DIR)/fat32.o: fat32.c fat32.h ata.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c fat32.c -o $@
+
+$(BUILD_DIR)/vfs.o: vfs.c vfs.h fat32.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c vfs.c -o $@
+
+$(BUILD_DIR)/pci.o: pci.c pci.h cpu.h apic.h acpi.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c pci.c -o $@
+
+$(BUILD_DIR)/acpi.o: acpi.c acpi.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c acpi.c -o $@
+
+$(BUILD_DIR)/apic.o: apic.c apic.h acpi.h cpu.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c apic.c -o $@
+
+clean:
+	@rm -rf $(BUILD_DIR)
+	@echo "Kernel build cleaned"
+
+$(BUILD_DIR)/xhci.o: xhci.c xhci.h pci.h cpu.h mem.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c xhci.c -o $@
+
+$(BUILD_DIR)/ahci.o: ahci.c ahci.h pci.h cpu.h mem.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c ahci.c -o $@
+
+$(BUILD_DIR)/nvme.o: nvme.c nvme.h pci.h cpu.h mem.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c nvme.c -o $@
+
+$(BUILD_DIR)/e1000.o: e1000.c net.h pci.h cpu.h mem.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c e1000.c -o $@
+
+$(BUILD_DIR)/net.o: net.c net.h cpu.h mem.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(KERNEL_CFLAGS) -c net.c -o $@
+
+$(BUILD_DIR)/audio.o: audio.c audio.h pci.h cpu.h mem.h
+	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c audio.c -o $@
 
 $(BUILD_DIR)/console.o: console.c console.h framebuffer.h pointer.h ../include/handoff.h
