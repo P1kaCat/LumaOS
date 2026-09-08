@@ -304,23 +304,20 @@ void irq_default_handler(uint8_t irq) {
             ps2_mouse_byte(sc);
             apic_eoi(irq); return;
         }
-        /* Phase 5: keyboard scancode → ASCII → ring buffer */
-        if (sc == 0x2A || sc == 0x36) {
-            /* Left Shift or Right Shift pressed */
-            shift_pressed = 1;
-        } else if (sc == 0xAA || sc == 0xB6) {
-            /* Left Shift or Right Shift released */
-            shift_pressed = 0;
-        } else if (!(sc & 0x80) && sc < 128) {  /* make code only */
-            char c = shift_pressed ? scancode_shift_map[sc] : scancode_map[sc];
-            if (c) {
-                int next_tail = (kb_tail + 1) % KB_BUF_SIZE;
-                if (next_tail != kb_head) {  /* buffer not full */
-                    kb_buffer[kb_tail] = c;
-                    kb_tail = next_tail;
-                }
-            }
+        static int extended;
+        if (sc == 0xE0) { extended = 1; apic_eoi(irq); return; }
+        if (sc == 0x2A || sc == 0x36) shift_pressed = 1;
+        else if (sc == 0xAA || sc == 0xB6) shift_pressed = 0;
+        uint8_t key = sc & 0x7F;
+        char c = extended ? 0 : (shift_pressed ? scancode_shift_map[key] : scancode_map[key]);
+        uint32_t flags = (sc & 0x80 ? 0 : LUMAOS_INPUT_DOWN) |
+                         (extended ? LUMAOS_INPUT_EXTENDED : 0);
+        int captured = graphics_key_event(key, (uint8_t)c, flags);
+        if (!captured && !(sc & 0x80) && c) {
+            int next_tail = (kb_tail + 1) % KB_BUF_SIZE;
+            if (next_tail != kb_head) { kb_buffer[kb_tail] = c; kb_tail = next_tail; }
         }
+        extended = 0;
     }
     apic_eoi(irq);
 }
@@ -557,6 +554,16 @@ void syscall_handler(struct registers *regs) {
                 (struct lumaos_graphics_info *)(uintptr_t)regs->rdi);
             break;
         }
+
+        case LUMAOS_SYS_INPUT_READ:
+            if (!regs->rsi || regs->rsi > LUMAOS_INPUT_BATCH ||
+                !validate_user_ptr(regs->rdi, (uint32_t)regs->rsi * sizeof(struct lumaos_input_event), 1)) {
+                regs->rax = (uint64_t)-1;
+                break;
+            }
+            regs->rax = (uint64_t)(int64_t)graphics_read_input(
+                (struct lumaos_input_event *)(uintptr_t)regs->rdi, (uint32_t)regs->rsi, proc_current_pid());
+            break;
 
         case LUMAOS_SYS_GRAPHICS_ACQUIRE:
             regs->rax = (uint64_t)(int64_t)graphics_acquire(proc_current_pid());

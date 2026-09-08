@@ -31,7 +31,9 @@ jobs:
         run: make clean && make
 
       - name: Test framebuffer renderer and console bounds
-        run: python3 tests/test_console.py
+        run: |
+          python3 tests/test_console.py
+          python3 tests/test_input.py
 
       - name: Verify build artifacts
         run: |

@@ -3,25 +3,27 @@
 #include "console.h"
 #include "pointer.h"
 #include "sched.h"
+#include "input.h"
 #include <stdint.h>
 
 static struct lumaos_handoff *screen;
 static struct task *owner_task;
-static int owner_pid;
+static int owner_pid, input_focus;
 
 static void drop_stale_owner(void) {
-    if (!owner_task) return;
-    if (!owner_task->is_user || owner_task->state == PROC_TERMINATED ||
-        owner_task->pid != owner_pid) {
+    if (owner_task && (!owner_task->is_user || owner_task->state == PROC_TERMINATED ||
+                      owner_task->pid != owner_pid)) {
         owner_task = 0;
-        owner_pid = 0;
+        owner_pid = input_focus = 0;
+        input_reset();
     }
 }
 
 void graphics_init(struct lumaos_handoff *ho) {
     screen = 0;
     owner_task = 0;
-    owner_pid = 0;
+    owner_pid = input_focus = 0;
+    input_reset();
     if (fb_valid(ho) && ho->fb_width <= INT32_MAX &&
         ho->fb_height > CONSOLE_TOP && ho->fb_height <= INT32_MAX &&
         ho->fb_format <= LUMAOS_PIXEL_BGR) screen = ho;
@@ -43,6 +45,8 @@ int graphics_acquire(int pid) {
     if (!owner_task) {
         owner_task = (struct task *)sched_current;
         owner_pid = pid;
+        input_focus = 0;
+        input_reset();
         return 0;
     }
     return (owner_task == sched_current && owner_pid == pid) ? 0 : -1;
@@ -54,6 +58,8 @@ int graphics_release(int pid) {
         return -1;
     owner_task = 0;
     owner_pid = 0;
+    input_focus = 0;
+    input_reset();
     return 0;
 }
 
@@ -101,4 +107,31 @@ int graphics_present(const struct lumaos_surface_present *p, int pid) {
     }
     pointer_show();
     return 0;
+}
+
+int graphics_is_owner(int pid) {
+    drop_stale_owner();
+    return owner_task && owner_pid == pid;
+}
+
+int graphics_read_input(struct lumaos_input_event *events, uint32_t count, int pid) {
+    if (!graphics_is_owner(pid) || owner_task != sched_current) return -1;
+    int result = input_read(events, count);
+    if (result >= 0) input_focus = 1;
+    return result;
+}
+
+int graphics_key_event(uint32_t code, uint32_t value, uint32_t flags) {
+    drop_stale_owner();
+    if (!owner_task) return 0;
+    struct lumaos_input_event e = {LUMAOS_INPUT_KEY, code, 0, 0, value, flags};
+    input_push(&e);
+    return input_focus;
+}
+
+void graphics_pointer_event(int32_t x, int32_t y, uint32_t buttons) {
+    drop_stale_owner();
+    if (!owner_task) return;
+    struct lumaos_input_event e = {LUMAOS_INPUT_POINTER, buttons, x, y - (int32_t)CONSOLE_TOP, 0, 0};
+    input_push(&e);
 }

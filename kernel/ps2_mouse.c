@@ -1,4 +1,5 @@
 #include "mouse.h"
+#include "graphics.h"
 #include "pointer.h"
 #include "cpu.h"
 #include "apic.h"
@@ -63,6 +64,10 @@ void ps2_mouse_reset_packet(void) { decoder.count = 0; }
 
 void ps2_mouse_byte(uint8_t byte) {
     struct mouse_event event;
-    if (ready && mouse_decode(&decoder, byte, &event))
+    if (ready && mouse_decode(&decoder, byte, &event)) {
         pointer_move(event.dx, event.dy, event.buttons);
+        int32_t x, y;
+        pointer_position(&x, &y);
+        graphics_pointer_event(x, y, event.buttons);
+    }
 }

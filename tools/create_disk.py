@@ -21,7 +21,7 @@ NUM_FATS = 2
 FAT_ENTRY_SIZE = 4  # 4 bytes per entry in FAT32
 CLUSTER_SIZE = BYTES_PER_SECTOR * SECTORS_PER_CLUSTER  # 512 bytes
 
-def create_disk(path, prog_path=None):
+def create_disk(path, prog_path=None, extra_paths=()):
     total_sectors = (DISK_SIZE_MB * 1024 * 1024) // BYTES_PER_SECTOR
 
     # Calculate FAT size (sectors per FAT)
@@ -180,6 +180,29 @@ def create_disk(path, prog_path=None):
     else:
         print("\nNo ELF program provided (skipping PROG.ELF)")
 
+    # Additional bounded 8.3 user programs; retain the original PROG.ELF layout.
+    for extra_path in extra_paths:
+        stem, ext = os.path.basename(extra_path).upper().rsplit('.', 1)
+        if not (1 <= len(stem) <= 8 and 1 <= len(ext) <= 3) or dir_entry_idx >= 15:
+            raise ValueError('Extra program must fit an available 8.3 root entry')
+        with open(extra_path, 'rb') as f:
+            data = f.read()
+        count = (len(data) + CLUSTER_SIZE - 1) // CLUSTER_SIZE
+        if not count or next_free_cluster + count > total_clusters + 2:
+            raise ValueError('Extra program exceeds disk capacity')
+        first = next_free_cluster
+        for i in range(count):
+            cluster = first + i
+            struct.pack_into('<I', fat, cluster * 4, 0x0FFFFFFF if i == count-1 else cluster+1)
+            off = cluster_to_offset(cluster)
+            chunk = data[i*CLUSTER_SIZE:(i+1)*CLUSTER_SIZE]
+            disk[off:off+len(chunk)] = chunk
+        write_dir_entry(dir_entry_idx, (stem.ljust(8)+ext.ljust(3)).encode('ascii'),
+                        0x20, first, len(data))
+        dir_entry_idx += 1
+        next_free_cluster += count
+        print(f'  {stem}.{ext} -> clusters {first}-{next_free_cluster-1}')
+
     # End-of-directory marker
     disk[root_offset + dir_entry_idx * 32] = 0x00
 
@@ -203,4 +226,4 @@ if __name__ == '__main__':
         print(f"Usage: {sys.argv[0]} <output_path> [prog.elf]")
         sys.exit(1)
     prog = sys.argv[2] if len(sys.argv) >= 3 else None
-    create_disk(sys.argv[1], prog)
+    create_disk(sys.argv[1], prog, sys.argv[3:])

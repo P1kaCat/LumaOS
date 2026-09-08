@@ -408,7 +408,7 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Phase 9.7: isolated Ring 3 surface presentation and exclusive presenter
   (ABI v2; bounds/pointer checks, second-process rejection, 23/23 Ubuntu CI
   on `640a543`: [validation](https://github.com/P1kaCat/LumaOS/actions/runs/34234501512)).
-- [ ] Ring 3 keyboard/mouse event interface
+- [x] Ring 3 keyboard/mouse event interface (local QEMU + bounded queue tests PASS; CI pending)
 - [ ] Inter-process surface sharing for application windows
 - [ ] Windows
 - [ ] Isolated userspace compositor (user-approved architecture, 2026-09-08)

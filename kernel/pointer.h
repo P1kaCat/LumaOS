@@ -6,4 +6,5 @@ void pointer_init(struct lumaos_handoff *ho);
 void pointer_hide(void);
 void pointer_show(void);
 void pointer_move(int32_t dx, int32_t dy, uint8_t buttons);
+void pointer_position(int32_t *px, int32_t *py);
 #endif

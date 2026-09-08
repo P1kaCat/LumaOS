@@ -61,3 +61,5 @@ void pointer_move(int32_t dx, int32_t dy, uint8_t buttons) {
     pressed = buttons & 7;
     pointer_show();
 }
+
+void pointer_position(int32_t *px, int32_t *py) { *px = x; *py = y; }

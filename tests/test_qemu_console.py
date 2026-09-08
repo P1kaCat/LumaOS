@@ -67,6 +67,26 @@ for command in ['mouse_move 80 40', 'screendump build/pointer-moved.ppm',
     time.sleep(0.4)
     s.recv(4096)
 '''
+extra += r"""
+from pathlib import Path
+def wait_marker(marker):
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if marker in Path('build/console-serial.log').read_text(errors='replace'):
+            return
+        time.sleep(0.05)
+    raise RuntimeError('Missing user-process marker: ' + marker)
+for key in list('run input.elf') + ['ret']:
+    send_key({' ': 'spc', '.': 'dot'}.get(key, key))
+wait_marker('[INPUT9] ready')
+send_key('h')
+for command in ['mouse_move 16 12', 'mouse_button 1', 'mouse_button 0']:
+    s.sendall((command + '\n').encode())
+    time.sleep(0.3)
+    s.recv(4096)
+send_key('x')
+wait_marker('[INPUT9] keys, pointer, buttons, empty read and invalid buffers passed')
+"""
 if options.repeat_exec:
     extra = extra.replace("['help'] * 10 + ['pid', 'mem']",
                           "['run prog.elf'] * 6 + ['help'] * 10 + ['pid', 'mem']")
@@ -193,3 +213,7 @@ print('PASS: PS/2 mouse motion, click/release and exact framebuffer restoration'
 
 if options.repeat_exec:
     print('PASS: 8 ELF executions with reused process/address-space slots')
+
+assert '[INPUT9] FAILED' not in log
+assert '[INPUT9] keys, pointer, buttons, empty read and invalid buffers passed' in log
+print('PASS: actual Ring 3 input delivery and invalid-buffer checks')
