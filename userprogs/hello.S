@@ -194,8 +194,9 @@ graphics_owner:
 
     /* Spawn the same ELF while ownership is held. The child must take the
      * graphics_non_owner path, proving process isolation. sleep() marks the
-     * owner non-runnable; the short pause loop guarantees a timer IRQ occurs
-     * before this process can release ownership. */
+     * owner non-runnable. We only need to remain in userspace long enough for
+     * the first 50 Hz timer IRQ; after that, the five-tick sleep gives the
+     * child ample time to run before this owner can release the display. */
     leaq msg_prog(%rip), %rdi
     movq $12, %rax
     int $0x80
@@ -204,7 +205,7 @@ graphics_owner:
     movq $5, %rax
     movq $5, %rdi
     int $0x80
-    movq $50000000, %rcx
+    movq $1000000, %rcx
 1:
     pause
     loop 1b
