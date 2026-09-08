@@ -132,7 +132,13 @@ markers = re.findall(r'"([^"\n]+)"', section)
 assert len(markers) == 23
 missing = [marker for marker in markers if marker not in log]
 assert not missing, missing
-assert '> cat hello.txt\n' in log and '> run prog.elf\n' in log
+# The shell may print its prompt before the asynchronous startup GFX markers,
+# leaving the subsequently echoed command on a bare line. Require the exact
+# command and its effect rather than requiring the prompt to be adjacent.
+assert re.search(r'(?:^|\n)(?:> )?cat hello\.txt\nHello from LumaOS!\n', log), \
+    'cat command echo/result missing'
+assert re.search(r'(?:^|\n)(?:> )?run prog\.elf\n\[\*\] ELF loader: prog\.elf\n', log), \
+    'run command echo/loader start missing'
 expected_execs = 8 if options.repeat_exec else 2
 assert log.count('Hello from loaded program!') >= expected_execs, 'repeated exec failed'
 assert log.count('[GFX9] info query and pointer checks passed') >= expected_execs
