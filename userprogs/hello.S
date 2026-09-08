@@ -193,18 +193,21 @@ graphics_owner:
     jne graphics_fail
 
     /* Spawn the same ELF while ownership is held. The child must take the
-     * graphics_non_owner path, proving process isolation. */
+     * graphics_non_owner path, proving process isolation. sleep() marks the
+     * owner non-runnable; the short pause loop guarantees a timer IRQ occurs
+     * before this process can release ownership. */
     leaq msg_prog(%rip), %rdi
     movq $12, %rax
     int $0x80
     cmpq $0, %rax
     jl graphics_fail
-    movq $3, %r12
-1:
-    movq $6, %rax
+    movq $5, %rax
+    movq $5, %rdi
     int $0x80
-    decq %r12
-    jnz 1b
+    movq $50000000, %rcx
+1:
+    pause
+    loop 1b
 
     /* Voluntary release and immediate reacquire are both controlled. */
     movq $16, %rax
