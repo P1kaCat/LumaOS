@@ -109,6 +109,8 @@ missing = [marker for marker in markers if marker not in log]
 assert not missing, missing
 assert '> cat hello.txt\n' in log and '> run prog.elf\n' in log
 assert log.count('Hello from loaded program!') >= 2
+assert log.count('[GFX9] info query and pointer checks passed') >= 2
+assert '[GFX9] info query FAILED' not in log
 assert 'helx\b \bp\nCommands:' in log, 'backspace command did not execute'
 assert log.count('Commands:') >= 11 and 'PID: 3' in log
 assert '> mem\nFree pages:' in log

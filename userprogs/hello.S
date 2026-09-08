@@ -21,6 +21,52 @@
 .text
 .global _start
 _start:
+    /* Query from a real Ring 3 stack, with an adjacent overwrite canary. */
+    subq $32, %rsp
+    movq $0x12345678, 16(%rsp)
+    movq %rsp, %rdi
+    movq $16, %rsi
+    movq $13, %rax
+    int $0x80
+    testq %rax, %rax
+    jne graphics_fail
+    cmpl $1, 0(%rsp)
+    jne graphics_fail
+    cmpl $0, 4(%rsp)
+    je graphics_fail
+    cmpl $0, 8(%rsp)
+    je graphics_fail
+    cmpl $1, 12(%rsp)
+    ja graphics_fail
+    cmpq $0x12345678, 16(%rsp)
+    jne graphics_fail
+
+    /* Wrong size, kernel memory, read-only text and a cross-page buffer. */
+    xorq %rsi, %rsi
+    movq $13, %rax
+    int $0x80
+    cmpq $-1, %rax
+    jne graphics_fail
+    movq $16, %rsi
+    movq $0x100000, %rdi
+    movq $13, %rax
+    int $0x80
+    cmpq $-1, %rax
+    jne graphics_fail
+    leaq msg_hello(%rip), %rdi
+    movq $13, %rax
+    int $0x80
+    cmpq $-1, %rax
+    jne graphics_fail
+    movq $0xBFFFF8, %rdi
+    movq $13, %rax
+    int $0x80
+    cmpq $-1, %rax
+    jne graphics_fail
+    leaq msg_graphics(%rip), %rdi
+    xorq %rax, %rax
+    int $0x80
+    addq $32, %rsp
     /* Write "Hello from loaded program!\n" to serial */
     leaq msg_hello(%rip), %rdi
     xorq %rax, %rax              /* syscall 0 = write(buf, len) */
@@ -47,3 +93,16 @@ msg_hello:
     .asciz "Hello from loaded program!\n"
 msg_marker:
     .asciz "[EXEC12] test passed\n"
+
+graphics_fail:
+    leaq msg_graphics_fail(%rip), %rdi
+    xorq %rax, %rax
+    int $0x80
+    movq $1, %rax
+    movq $1, %rdi
+    int $0x80
+    jmp graphics_fail
+msg_graphics:
+    .asciz "[GFX9] info query and pointer checks passed\n"
+msg_graphics_fail:
+    .asciz "[GFX9] info query FAILED\n"

@@ -399,9 +399,10 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Phase 9.4: CPU 2D fills, rectangle outlines and overlapping rectangle copies
   (guarded host tests + existing console scroll + 23/23 local + Ubuntu CI PASS on `c2d4fdf`).
 - [ ] 2D rendering (lines, sprites and application surfaces remain)
-- [x] PS/2 keyboard and three-button mouse input (local QEMU; CI pending)
+- [x] PS/2 keyboard and three-button mouse input (Windows/Ubuntu QEMU PASS on `a834ba3`)
 - [ ] USB HID keyboard/mouse input
-- [x] Software pointer with background restoration (local host + QEMU; CI pending)
+- [x] Software pointer with background restoration (host + Windows/Ubuntu QEMU PASS on `a834ba3`)
+- [x] Phase 9.6: validated Ring 3 graphics-info query (local QEMU + pointer checks)
 - [ ] Safe graphics surface and input interface for Ring 3
 - [ ] Windows
 - [ ] Isolated userspace compositor (user-approved architecture, 2026-09-08)

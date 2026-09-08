@@ -11,6 +11,7 @@
 #include "apic.h"
 #include "console.h"
 #include "mouse.h"
+#include "graphics.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -543,6 +544,17 @@ void syscall_handler(struct registers *regs) {
             }
             int pid = spawn_file(kpath);
             regs->rax = (uint64_t)(int64_t)pid;
+            break;
+        }
+
+        case LUMAOS_SYS_GRAPHICS_INFO: {
+            if (regs->rsi != sizeof(struct lumaos_graphics_info) ||
+                !validate_user_ptr(regs->rdi, sizeof(struct lumaos_graphics_info), 1)) {
+                regs->rax = (uint64_t)-1;
+                break;
+            }
+            regs->rax = (uint64_t)(int64_t)graphics_get_info(
+                (struct lumaos_graphics_info *)(uintptr_t)regs->rdi);
             break;
         }
 

@@ -58,10 +58,18 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   **23/23**, déplacement/clic/relâchement/restauration exacte PASS,
   Validation finale : nettoyage/build complet/tests mémoire PASS ; profil CI
   pages **7622 == 7622**, profil run **7626 == 7626**, tous deux **23/23**
-  avec mouvement/clic/relâchement/restauration exacte. CI en attente.
+  avec mouvement/clic/relâchement/restauration exacte. `a834ba3` validé :
+  [CI](https://github.com/P1kaCat/LumaOS/actions/runs/34219569397) et
+  [xHCI](https://github.com/P1kaCat/LumaOS/actions/runs/34219569423) PASS.
+  Ubuntu : **23/23** sur les deux profils, pages **7587 == 7587** / **7591 == 7591**.
 - Décision utilisateur du 2026-09-08 : le compositeur sera un **processus
   utilisateur isolé**, avec surfaces bornées et interface d'événements ;
   ne pas construire le gestionnaire de fenêtres dans le noyau.
+- Phase 9.6 : syscall 13 `graphics_info(buf, 16)` : version, dimensions du
+  viewport sous le titre, format RGB/BGR. Aucune adresse physique exposée.
+  Le programme ELF existant vérifie depuis Ring 3 le cas valide, la taille,
+  un pointeur noyau, une page texte en lecture seule et une limite de page.
+  Build/QEMU local **23/23**, pages **7620 == 7620**. CI du checkpoint à venir.
 - Limites : clavier/souris USB HID et matériel réel non validés.
 - Réseau : marqueur d'initialisation présent mais aucune réponse ping établie ;
   le message UDP seul n'est pas une preuve de transmission effective.

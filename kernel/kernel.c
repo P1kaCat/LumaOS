@@ -19,6 +19,7 @@
 #include "framebuffer.h"
 #include "mouse.h"
 #include "pointer.h"
+#include "graphics.h"
 
 static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
@@ -376,6 +377,7 @@ void kernel_main(struct lumaos_handoff *ho) {
 
     /* ---- Phase 5: scheduler + shell ---- */
     console_init(ho);
+    graphics_init(ho);
     console_write("LumaOS console ready\n");
     if (ps2_mouse_init()) pointer_init(ho);
     serial_puts("\n[*] Starting scheduler...\n");
