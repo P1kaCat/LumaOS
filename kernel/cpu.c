@@ -558,6 +558,53 @@ void syscall_handler(struct registers *regs) {
             break;
         }
 
+        case LUMAOS_SYS_GRAPHICS_ACQUIRE:
+            regs->rax = (uint64_t)(int64_t)graphics_acquire(proc_current_pid());
+            break;
+
+        case LUMAOS_SYS_GRAPHICS_PRESENT: {
+            if (regs->rsi != sizeof(struct lumaos_surface_present) ||
+                !validate_user_ptr(regs->rdi, sizeof(struct lumaos_surface_present), 0)) {
+                regs->rax = (uint64_t)-1;
+                break;
+            }
+
+            struct lumaos_surface_present present =
+                *(const struct lumaos_surface_present *)(uintptr_t)regs->rdi;
+            if (graphics_validate_present(&present) != 0) {
+                regs->rax = (uint64_t)-1;
+                break;
+            }
+
+            uint32_t row_bytes = present.width * 4U;
+            int valid = 1;
+            for (uint32_t row = 0; row < present.height; row++) {
+                uint64_t src_y = (uint64_t)present.src_y + row;
+                uint64_t yoff = src_y * present.stride_bytes;
+                uint64_t xoff = (uint64_t)present.src_x * 4ULL;
+                if (yoff > UINT64_MAX - xoff) { valid = 0; break; }
+                uint64_t off = yoff + xoff;
+                if (present.pixels > UINT64_MAX - off) { valid = 0; break; }
+                uint64_t row_addr = present.pixels + off;
+                if (!validate_user_ptr(row_addr, row_bytes, 0)) {
+                    valid = 0;
+                    break;
+                }
+            }
+            if (!valid) {
+                regs->rax = (uint64_t)-1;
+                break;
+            }
+
+            regs->rax = (uint64_t)(int64_t)graphics_present(
+                &present, proc_current_pid());
+            break;
+        }
+
+        case LUMAOS_SYS_GRAPHICS_RELEASE:
+            regs->rax = (uint64_t)(int64_t)graphics_release(proc_current_pid());
+            break;
+
         default:
             regs->rax = (uint64_t)-1;  /* error: unknown syscall */
             break;

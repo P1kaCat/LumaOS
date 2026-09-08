@@ -139,6 +139,6 @@ $(BUILD_DIR)/pointer.o: pointer.c pointer.h framebuffer.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c pointer.c -o $@
 
-$(BUILD_DIR)/graphics.o: graphics.c graphics.h framebuffer.h console.h ../include/graphics_abi.h ../include/handoff.h
+$(BUILD_DIR)/graphics.o: graphics.c graphics.h framebuffer.h console.h pointer.h sched.h ../include/graphics_abi.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c graphics.c -o $@
