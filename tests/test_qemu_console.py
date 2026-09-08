@@ -93,7 +93,28 @@ with open('build/console-qemu.log', 'w') as log_file:
             time.sleep(0.1)
         else:
             raise RuntimeError('Shell timeout: see build/console-serial.log')
-        print('PASS: QEMU boot and shell', flush=True)
+
+        # Init starts the first Ring 3 graphics test alongside the shell. Wait
+        # for that owner and its deliberately contending child to finish before
+        # injecting keyboard input, otherwise their asynchronous serial markers
+        # can split the shell's echoed command text (e.g. "ca[GFX9]...t").
+        startup_deadline = time.monotonic() + 10
+        startup_markers = (
+            '[GFX9] non-owner presentation rejected',
+            '[GFX9] surface presentation and ownership checks passed',
+            '[EXEC12] test passed',
+        )
+        while time.monotonic() < startup_deadline:
+            if process.poll() is not None:
+                raise RuntimeError('QEMU exited during Ring 3 startup test')
+            startup_log = serial.read_text(errors='replace') if serial.exists() else ''
+            if all(marker in startup_log for marker in startup_markers):
+                break
+            time.sleep(0.05)
+        else:
+            raise RuntimeError('Ring 3 startup graphics test timeout')
+
+        print('PASS: QEMU boot, shell and initial Ring 3 graphics test', flush=True)
         exec(compile(harness, 'CI keyboard injection + console checks', 'exec'), {})
         time.sleep(5)
     finally:
