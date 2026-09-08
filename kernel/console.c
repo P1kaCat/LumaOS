@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "console.h"
+#include "framebuffer.h"
 #include "../include/handoff.h"
 
 /* Hand-drawn 5x7 ASCII glyphs in 8x8 cells. Bit 7 is the leftmost pixel.
@@ -104,14 +105,8 @@ static const uint8_t font8x8[95][8] = {
 };
 #undef G
 
-static int framebuffer_valid(const struct lumaos_handoff *ho) {
-    return ho && ho->framebuffer && !(ho->framebuffer & 3) &&
-           ho->fb_bpp == 32 && ho->fb_width && ho->fb_height &&
-           !(ho->fb_pitch & 3) && ho->fb_pitch / 4 >= ho->fb_width;
-}
-
 void draw_char(struct lumaos_handoff *ho, char c, int x, int y, uint32_t color) {
-    if (!framebuffer_valid(ho)) return;
+    if (!fb_valid(ho)) return;
     unsigned char ch = (unsigned char)c;
     if (ch < 32 || ch > 126) ch = '?';
     volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)ho->framebuffer;
@@ -131,11 +126,7 @@ static uint32_t columns, rows, column, row, background;
 static const uint32_t foreground = 0x00FFFFFF;
 
 static void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)console_fb->framebuffer;
-    uint32_t stride = console_fb->fb_pitch / 4;
-    for (uint32_t dy = 0; dy < h; dy++)
-        for (uint32_t dx = 0; dx < w; dx++)
-            fb[(uint64_t)(y + dy) * stride + x + dx] = color;
+    fb_fill_rect(console_fb, (int32_t)x, (int32_t)y, w, h, color);
 }
 
 /* The glyph's final row is blank, so hiding the underline loses no glyph data. */
@@ -146,13 +137,8 @@ static void cursor(int visible) {
 
 static void scroll_if_needed(void) {
     if (row < rows) return;
-    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)console_fb->framebuffer;
-    uint32_t stride = console_fb->fb_pitch / 4;
-    /* Forward copy is safe for this upward, overlapping move. Preserve pitch
-     * padding, the title and any incomplete cells at the screen edges. */
-    for (uint32_t y = CONSOLE_TOP; y < CONSOLE_TOP + (rows - 1) * 8; y++)
-        for (uint32_t x = 0; x < columns * 8; x++)
-            fb[(uint64_t)y * stride + x] = fb[(uint64_t)(y + 8) * stride + x];
+    fb_copy_rect(console_fb, 0, CONSOLE_TOP + 8, 0, CONSOLE_TOP,
+                 columns * 8, (rows - 1) * 8);
     row = rows - 1;
     fill_rect(0, CONSOLE_TOP + row * 8, columns * 8, 8, background);
 }
@@ -166,13 +152,13 @@ void console_clear(void) {
 
 void console_init(struct lumaos_handoff *ho) {
     console_fb = 0;
-    if (!framebuffer_valid(ho) || ho->fb_width < 8 ||
+    if (!fb_valid(ho) || ho->fb_width < 8 ||
         ho->fb_height < CONSOLE_TOP + 8 || ho->fb_width > INT32_MAX ||
         ho->fb_height > INT32_MAX || ho->fb_format > LUMAOS_PIXEL_BGR) return;
     console_fb = ho;
     columns = ho->fb_width / 8;
     rows = (ho->fb_height - CONSOLE_TOP) / 8;
-    background = ho->fb_format == LUMAOS_PIXEL_BGR ? 0x000F0F2D : 0x002D0F0F;
+    background = fb_color(15, 15, 45, ho->fb_format);
     console_clear();
 }
 
@@ -205,7 +191,7 @@ void console_write(const char *s) {
 }
 
 void draw_string(struct lumaos_handoff *ho, const char *s, int x, int y, uint32_t color) {
-    if (!s || !framebuffer_valid(ho)) return;
+    if (!s || !fb_valid(ho)) return;
     int64_t cx = x;
     for (; *s && cx < ho->fb_width && cx <= INT32_MAX; s++, cx += 8)
         draw_char(ho, *s, (int)cx, y, color);

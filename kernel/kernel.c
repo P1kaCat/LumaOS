@@ -16,6 +16,7 @@
 #include "net.h"
 #include "audio.h"
 #include "console.h"
+#include "framebuffer.h"
 
 static char *uitoa(uint64_t n, char *buf) {
     if (!n) { buf[0]='0'; buf[1]=0; return buf; }
@@ -27,21 +28,6 @@ static char *uxtoa(uint64_t n, char *buf) {
     char tmp[32]; int i=0; const char *h="0123456789ABCDEF";
     while (n) { tmp[i++]=h[n&0xF]; n>>=4; }
     int j=0; while (i) buf[j++]=tmp[--i]; buf[j]=0; return buf;
-}
-
-static uint32_t make_color(uint8_t r, uint8_t g, uint8_t b, uint32_t fmt) {
-    if (fmt == LUMAOS_PIXEL_BGR) return (uint32_t)b | ((uint32_t)g<<8) | ((uint32_t)r<<16);
-    return (uint32_t)r | ((uint32_t)g<<8) | ((uint32_t)b<<16);
-}
-static void fb_fill(struct lumaos_handoff *ho, uint32_t c) {
-    uint32_t *fb = (uint32_t *)(unsigned long)ho->framebuffer;
-    uint32_t p = ho->fb_pitch / 4;
-    for (uint32_t y=0;y<ho->fb_height;y++) for (uint32_t x=0;x<ho->fb_width;x++) fb[y*p+x]=c;
-}
-static void fb_rect(struct lumaos_handoff *ho, uint32_t c, uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
-    uint32_t *fb = (uint32_t *)(unsigned long)ho->framebuffer;
-    uint32_t p = ho->fb_pitch / 4;
-    for (uint32_t dy=0;dy<h;dy++) for (uint32_t dx=0;dx<w;dx++) { uint32_t px=x+dx,py=y+dy; if(px<ho->fb_width&&py<ho->fb_height) fb[py*p+px]=c; }
 }
 
 /* Phase 5: kernel background tasks (silent — just hlt) */
@@ -103,12 +89,12 @@ void kernel_main(struct lumaos_handoff *ho) {
     serial_puts("================================\n");
     serial_puts("Kernel is alive!\n\n");
 
-    uint32_t bg = make_color(15,15,45,ho->fb_format);
+    uint32_t bg = fb_color(15,15,45,ho->fb_format);
     fb_fill(ho, bg);
     draw_string(ho, "LumaOS Phase 9", 20, 20, 0xFFFFFFFF);
-    uint32_t green = make_color(40,200,100,ho->fb_format);
+    uint32_t green = fb_color(40,200,100,ho->fb_format);
     uint32_t cx=ho->fb_width/2, cy=ho->fb_height/2, bw=ho->fb_width/4, bh=ho->fb_height/4;
-    fb_rect(ho, green, cx-bw/2, cy-bh/2, bw, bh);
+    fb_fill_rect(ho, cx-bw/2, cy-bh/2, bw, bh, green);
 
     serial_puts("[*] Setting up CPU tables...\n");
     gdt_init();

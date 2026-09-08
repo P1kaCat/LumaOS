@@ -391,12 +391,14 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Phase 9.2: text console, cursor, wrapping and scrolling
   (host tests for bounds/RGB/BGR/scrolling; QEMU initialization + 23/23).
 - [x] Phase 9.3: existing Ring 3 shell writes to framebuffer and serial
-  (local QEMU: help/backspace/pid/mem/cat/run/exit, scrolling, 23/23; CI pending).
+  (local QEMU: help/backspace/pid/mem/cat/run/exit, scrolling, 23/23; Ubuntu CI PASS on `e2e8287`).
 
 - [x] Interactive launcher keeps PS/2 keyboard available and uses separate NVMe image
-  (local QEMU profile: 23/23; CI validation pending).
-- [x] Framebuffer console (local host + QEMU validation, no USB HID claim)
-- [ ] 2D rendering
+  (Windows and Ubuntu QEMU profiles: 23/23, no page leak).
+- [x] Framebuffer console (host + Windows/Ubuntu QEMU validated, no USB HID claim)
+- [x] Phase 9.4: CPU 2D fills, rectangle outlines and overlapping rectangle copies
+  (guarded host tests + existing console scroll + 23/23 local; CI pending).
+- [ ] 2D rendering (lines, sprites and application surfaces remain)
 - [ ] Keyboard and mouse input
 - [ ] Cursor
 - [ ] Windows

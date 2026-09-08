@@ -2,7 +2,7 @@
 
 Ce document décrit l'architecture mémoire, le système de fichiers, les appels système et l'état des sous-systèmes matériels de LumaOS.
 
-## État validé — 2026-09-07
+## État validé — 2026-09-08
 
 - Correction des régressions **complètement validée** : `303d27d`, `main` distant.
   [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34140244402) et
@@ -29,7 +29,11 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   les écritures. La console est initialisée avant init/shell, sans allocation.
   `python3 tests/test_qemu_console.py` lance la configuration CI, vérifie les
   23 attentes, Backspace, help/pid/mem/cat/run/exit, force le scroll et vérifie
-  les captures PPM. PASS local, pages **7637 == 7637** ; CI Phase 9 en attente.
+  les captures PPM. PASS local, pages **7637 == 7637**. Bloc console complètement validé
+  sur `e2e8287` : [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34142172123)
+  et [xHCI](https://github.com/P1kaCat/LumaOS/actions/runs/34142172160) PASS.
+  Ubuntu/QEMU 6.2 : profil CI **23/23**, pages **7588 == 7588** ;
+  profil run **23/23**, pages **7607 == 7607**.
   Validation finale locale : `make clean`, build complet, tests mémoire PASS ;
   profil CI **23/23**, pages **7624 == 7624** ; profil run **23/23**,
   pages **7641 == 7641**. Les deux profils sont intégrés au workflow existant.
@@ -38,6 +42,11 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   Le profil `--profile run` du test reprend les arguments du Makefile.
   Le runner supprime ses anciens journaux/captures avant le boot pour éviter
   une fausse détection du shell suivie d'une injection prématurée.
+- Phase 9.4 : primitives CPU communes `framebuffer.c/.h` extraites du code
+  existant : couleur RGB/BGR, remplissage, rectangle plein/contour, copie
+  bornée avec chevauchement. Le boot et le scroll de console les réutilisent.
+  Tests sur mémoire gardée, limites entières et 308 copies PASS ; QEMU local
+  **23/23**, pages **7636 == 7636**. CI de ce checkpoint en attente.
 - Limites : clavier/souris USB HID et matériel réel non validés.
 - Réseau : marqueur d'initialisation présent mais aucune réponse ping établie ;
   le message UDP seul n'est pas une preuve de transmission effective.

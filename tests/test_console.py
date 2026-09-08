@@ -14,11 +14,14 @@ OUT.mkdir(parents=True, exist_ok=True)
 lib_path = OUT / ('console.dll' if os.name == 'nt' else 'console.so')
 command = ['clang', '-ffreestanding', '-fno-stack-protector', '-O2',
            '-Wall', '-Wextra', '-Werror', '-shared', '-nostdlib',
-           str(ROOT / 'kernel/console.c'), '-o', str(lib_path)]
+           str(ROOT / 'kernel/console.c'), str(ROOT / 'kernel/framebuffer.c'), '-o', str(lib_path)]
 if os.name == 'nt':
     command += ['-fuse-ld=lld', '-Wl,/noentry', '-Wl,/export:draw_char',
                 '-Wl,/export:draw_string', '-Wl,/export:console_init',
-                '-Wl,/export:console_clear', '-Wl,/export:console_write']
+                '-Wl,/export:console_clear', '-Wl,/export:console_write',
+                '-Wl,/export:fb_fill_rect', '-Wl,/export:fb_fill',
+                '-Wl,/export:fb_outline', '-Wl,/export:fb_copy_rect',
+                '-Wl,/export:fb_color']
 else:
     command += ['-fPIC']
 subprocess.run(command, check=True)
@@ -162,3 +165,73 @@ lib.console_init(None)
 lib.console_write(b'ignored')
 lib.console_clear()
 print('PASS: console cursor, wrapping, backspace, tabs, scrolling, RGB/BGR and bounds')
+
+
+# 2D operations: compare the real C implementation with snapshot semantics.
+lib.fb_fill.argtypes = [C.POINTER(Handoff), C.c_uint32]
+rect_args = [C.POINTER(Handoff), C.c_int32, C.c_int32,
+             C.c_uint32, C.c_uint32, C.c_uint32]
+lib.fb_fill_rect.argtypes = rect_args
+lib.fb_outline.argtypes = rect_args
+lib.fb_copy_rect.argtypes = [C.POINTER(Handoff)] + [C.c_int32]*4 + [C.c_uint32]*2
+lib.fb_color.argtypes = [C.c_uint8, C.c_uint8, C.c_uint8, C.c_uint32]
+lib.fb_color.restype = C.c_uint32
+assert lib.fb_color(0x12, 0x34, 0x56, 0) == 0x563412
+assert lib.fb_color(0x12, 0x34, 0x56, 1) == 0x123456
+
+for x, y, w, h in [(2, 3, 7, 8), (-3, -2, 8, 8), (21, 13, 9, 8),
+                    (0, 0, 0, 8), (0, 0, 8, 0), (-2**31, 0, 2**32-1, 4),
+                    (2**31-1, 0, 2**32-1, 2), (-2**31, -2**31, 2**32-1, 2**32-1)]:
+    for outline in (False, True):
+        data, ho = surface()
+        operation = lib.fb_outline if outline else lib.fb_fill_rect
+        operation(C.byref(ho), x, y, w, h, FG)
+        expected = {(px, py) for py in range(16) for px in range(24)
+                    if x <= px < x+w and y <= py < y+h and
+                    (not outline or px in (x, x+w-1) or py in (y, y+h-1))}
+        assert pixels(data, ho) == expected, (outline, x, y, w, h)
+
+data, ho = surface()
+lib.fb_fill(C.byref(ho), FG)
+assert len(pixels(data, ho)) == 24*16
+
+import random
+rng = random.Random(9)
+cases = [(0, 0, 1, 0, 23, 16), (1, 0, 0, 0, 23, 16),
+         (0, 0, 0, 1, 24, 15), (0, 1, 0, 0, 24, 15),
+         (0, 0, 2, 2, 22, 14), (2, 2, 0, 0, 22, 14),
+         (-2**31, 0, -2**31, 1, 2**32-1, 15),
+         (2**31-1, 0, -2**31, 0, 2**32-1, 16)]
+cases += [tuple(rng.randint(-30, 30) for _ in range(4)) +
+          (rng.randrange(50), rng.randrange(40)) for _ in range(300)]
+for sx, sy, dx, dy, w, h in cases:
+    data, ho = surface()
+    stride = ho.fb_pitch // 4
+    for py in range(16):
+        for px in range(24):
+            data[1+py*stride+px] = py*24+px
+    before = list(data)
+    expected = before.copy()
+    # Iterate visible destinations, reading only from the original snapshot.
+    for py in range(16):
+        for px in range(24):
+            rx, ry = px-dx, py-dy
+            ax, ay = sx+rx, sy+ry
+            if 0 <= rx < w and 0 <= ry < h and 0 <= ax < 24 and 0 <= ay < 16:
+                expected[1+py*stride+px] = before[1+ay*stride+ax]
+    lib.fb_copy_rect(C.byref(ho), sx, sy, dx, dy, w, h)
+    assert list(data) == expected, (sx, sy, dx, dy, w, h)
+    pixels(data, ho)
+
+for field, value in [('framebuffer', 0), ('framebuffer', 2**64-4),
+                     ('fb_bpp', 24), ('fb_pitch', 97), ('fb_pitch', 4),
+                     ('fb_width', 0), ('fb_height', 0)]:
+    data, ho = surface()
+    before = list(data)
+    setattr(ho, field, value)
+    lib.fb_fill(C.byref(ho), FG)
+    lib.fb_fill_rect(C.byref(ho), 0, 0, 24, 16, FG)
+    lib.fb_outline(C.byref(ho), 0, 0, 24, 16, FG)
+    lib.fb_copy_rect(C.byref(ho), 0, 0, 1, 1, 10, 10)
+    assert list(data) == before
+print('PASS: 2D fills, outlines, clipping, integer limits and 308 overlapping copies')
