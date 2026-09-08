@@ -398,14 +398,18 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Framebuffer console (host + Windows/Ubuntu QEMU validated, no USB HID claim)
 - [x] Phase 9.4: CPU 2D fills, rectangle outlines and overlapping rectangle copies
   (guarded host tests + existing console scroll + 23/23 local + Ubuntu CI PASS on `c2d4fdf`).
-- [ ] 2D rendering (lines, sprites and application surfaces remain)
+- [ ] 2D rendering (lines, sprites and inter-process surface sharing remain)
 - [x] PS/2 keyboard and three-button mouse input (Windows/Ubuntu QEMU PASS on `a834ba3`)
 - [ ] USB HID keyboard/mouse input
 - [x] Software pointer with background restoration (host + Windows/Ubuntu QEMU PASS on `a834ba3`)
-- [x] Phase 9.6: validated Ring 3 graphics-info query (local QEMU + pointer checks)
+- [x] Phase 9.6: validated Ring 3 graphics-info query (local + Ubuntu CI, pointer checks)
 - [x] Reusable process/address-space slots for compositor relaunch
-  (eight sequential ELF executions, 23/23 and no leak locally; CI pending).
-- [ ] Safe graphics surface and input interface for Ring 3
+  (eight execution cycles, 23/23 and no leak locally + Ubuntu CI on `b740106`).
+- [x] Phase 9.7: isolated Ring 3 surface presentation and exclusive presenter
+  (ABI v2; bounds/pointer checks, second-process rejection, 23/23 Ubuntu CI
+  on `640a543`: [validation](https://github.com/P1kaCat/LumaOS/actions/runs/34234501512)).
+- [ ] Ring 3 keyboard/mouse event interface
+- [ ] Inter-process surface sharing for application windows
 - [ ] Windows
 - [ ] Isolated userspace compositor (user-approved architecture, 2026-09-08)
 - [ ] LumaOS desktop

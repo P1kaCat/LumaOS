@@ -4,7 +4,15 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
 
 ## État validé — 2026-09-08
 
-- Correction des régressions **complètement validée** : `303d27d`, `main` distant.
+- Dernier code validé : `640a543`, présentation de surfaces isolées Ring 3.
+  [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34234501512) et
+  [xHCI Driver Test](https://github.com/P1kaCat/LumaOS/actions/runs/34234501438) PASS.
+  Ubuntu/QEMU 6.2 : **23/23** sur les deux profils, pages
+  **7602 == 7602** (CI) / **7593 == 7593** (run + relancements).
+  Revalidation Windows depuis `make clean` : build complet et tests mémoire
+  PASS ; deux profils QEMU **23/23**, pages **7622 == 7622** /
+  **7639 == 7639**. Clavier, pointeur, surfaces et huit cycles ELF PASS.
+- Correction des régressions **complètement validée** sur `303d27d`.
   [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34140244402) et
   [xHCI Driver Test](https://github.com/P1kaCat/LumaOS/actions/runs/34140244405) PASS.
   Ubuntu 22.04 / QEMU 6.2 : **23/23 marqueurs**, `cat`, `run`, `exit` observés,
@@ -69,7 +77,9 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   viewport sous le titre, format RGB/BGR. Aucune adresse physique exposée.
   Le programme ELF existant vérifie depuis Ring 3 le cas valide, la taille,
   un pointeur noyau, une page texte en lecture seule et une limite de page.
-  Build/QEMU local **23/23**, pages **7620 == 7620**. CI du checkpoint à venir.
+  Build/QEMU local **23/23**, pages **7620 == 7620**. Validé en CI dans
+  `b740106` : [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34228458110)
+  et [xHCI](https://github.com/P1kaCat/LumaOS/actions/runs/34228458208) PASS.
 - Prérequis du compositeur : emplacements de processus/CR3 réutilisables.
   L'ancien compteur monotone épuisait quatre espaces d'adressage après la
   séquence de démonstration. Reproduction : six exec supplémentaires échouaient.
@@ -77,6 +87,17 @@ Ce document décrit l'architecture mémoire, le système de fichiers, les appels
   la terminaison et sur échec du chargement ; le scheduler réutilise les tâches
   terminées sans écraser la pile en cours. Huit exec QEMU PASS, **23/23**,
   pages **7620 == 7620**. Le profil CI run teste `--repeat-exec`.
+  Ubuntu sur `b740106` : **23/23**, pages **7586 == 7586** (CI) /
+  **7606 == 7606** (run avec huit exécutions).
+- Phase 9.7 (`640a543`) : ABI graphique v2, syscalls 14/15/16
+  acquire/present/release. Surfaces privées du processus, copie de rectangles
+  validés (stride, source, destination, pages accessibles, débordements).
+  Un seul propriétaire de présentation ; un second processus est refusé.
+  Le pointeur est masqué/restauré pendant la copie ; le titre reste protégé.
+  QEMU teste des requêtes valides et invalides, deux processus simultanés,
+  release/reacquire et huit cycles parent/enfant sans fuite. CI PASS ci-dessus.
+  Ce socle ne constitue pas encore un compositeur : le partage de surfaces
+  entre applications, les événements Ring 3 et les fenêtres restent à construire.
 - Limites : clavier/souris USB HID et matériel réel non validés.
 - Réseau : marqueur d'initialisation présent mais aucune réponse ping établie ;
   le message UDP seul n'est pas une preuve de transmission effective.
