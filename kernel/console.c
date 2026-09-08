@@ -188,8 +188,15 @@ static void console_putc(unsigned char c) {
     cursor(1);
 }
 
+static int graphics_mode;
+void console_graphics_mode(int enabled) {
+    int was_enabled = graphics_mode;
+    graphics_mode = enabled;
+    if (was_enabled && !enabled) console_clear();
+}
+
 void console_write(const char *s) {
-    if (!console_fb || !s) return;
+    if (!console_fb || !s || graphics_mode) return;
     pointer_hide();
     while (*s) console_putc((unsigned char)*s++);
     pointer_show();

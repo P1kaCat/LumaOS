@@ -36,6 +36,7 @@ uint64_t count_free_pages(void);
 int map_page(uint64_t cr3, uint64_t va, uint64_t pa, uint64_t flags);
 
 /* unmap_page: remove a 4KB mapping. Returns 0 on success, -1 if not mapped. */
+void reclaim_empty_pt(uint64_t cr3, uint64_t va);
 int unmap_page(uint64_t cr3, uint64_t va);
 
 /* get_page: read the PTE for va. Returns 0 if unmapped. */

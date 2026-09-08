@@ -7,6 +7,8 @@
 #include "cpu.h"
 #include "mem.h"
 #include "user.h"
+#include "surface.h"
+#include "graphics.h"
 
 static struct task tasks[MAX_TASKS];
 static int num_tasks = 0;
@@ -110,9 +112,18 @@ int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3, uint6
     return t->pid;
 }
 
+struct task *proc_find_user(int pid) {
+    for (int i = 0; i < num_tasks; i++)
+        if (tasks[i].pid == pid && tasks[i].is_user && tasks[i].state != PROC_TERMINATED)
+            return &tasks[i];
+    return 0;
+}
+
 void proc_terminate(int pid) {
     for (int i = 0; i < num_tasks; i++) {
         if (tasks[i].pid == pid && tasks[i].is_user) {
+            surface_cleanup(pid);
+            graphics_task_exit(pid);
             tasks[i].state = PROC_TERMINATED;
             user_release_address_space(tasks[i].cr3);
             tasks[i].cr3 = 0;

@@ -9,6 +9,7 @@
  * Writes must be serialized by the caller (syscall interrupt gate in kernel). */
 void console_init(struct lumaos_handoff *ho);
 void console_clear(void);
+void console_graphics_mode(int enabled);
 void console_write(const char *s);
 /* 8x8 ASCII cells, transparent background and clipped framebuffer writes.
  * Unsupported bytes render as '?'. Color is already in the native GOP format. */

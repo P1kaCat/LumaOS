@@ -86,6 +86,10 @@ for command in ['mouse_move 16 12', 'mouse_button 1', 'mouse_button 0']:
     s.recv(4096)
 send_key('x')
 wait_marker('[INPUT9] keys, pointer, buttons, empty read and invalid buffers passed')
+for key in list('run surftest.elf') + ['ret']:
+    send_key({' ': 'spc', '.': 'dot'}.get(key, key))
+wait_marker('[SURFACE9] bounds, ownership, stale handles, sharing and producer exit passed')
+
 """
 if options.repeat_exec:
     extra = extra.replace("['help'] * 10 + ['pid', 'mem']",
@@ -217,3 +221,7 @@ if options.repeat_exec:
 assert '[INPUT9] FAILED' not in log
 assert '[INPUT9] keys, pointer, buttons, empty read and invalid buffers passed' in log
 print('PASS: actual Ring 3 input delivery and invalid-buffer checks')
+
+assert '[SURFACE9] FAILED' not in log and '[SURFACE9] producer FAILED' not in log
+assert '[SURFACE9] bounds, ownership, stale handles, sharing and producer exit passed' in log
+print('PASS: shared surfaces, read-only recipient, stale handles and termination cleanup')

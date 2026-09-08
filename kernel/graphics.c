@@ -16,6 +16,7 @@ static void drop_stale_owner(void) {
         owner_task = 0;
         owner_pid = input_focus = 0;
         input_reset();
+        console_graphics_mode(0);
     }
 }
 
@@ -60,6 +61,7 @@ int graphics_release(int pid) {
     owner_pid = 0;
     input_focus = 0;
     input_reset();
+    console_graphics_mode(0);
     return 0;
 }
 
@@ -117,7 +119,7 @@ int graphics_is_owner(int pid) {
 int graphics_read_input(struct lumaos_input_event *events, uint32_t count, int pid) {
     if (!graphics_is_owner(pid) || owner_task != sched_current) return -1;
     int result = input_read(events, count);
-    if (result >= 0) input_focus = 1;
+    if (result >= 0) { input_focus = 1; console_graphics_mode(1); }
     return result;
 }
 
@@ -134,4 +136,13 @@ void graphics_pointer_event(int32_t x, int32_t y, uint32_t buttons) {
     if (!owner_task) return;
     struct lumaos_input_event e = {LUMAOS_INPUT_POINTER, buttons, x, y - (int32_t)CONSOLE_TOP, 0, 0};
     input_push(&e);
+}
+
+int graphics_owner_pid(void) { drop_stale_owner(); return owner_pid; }
+
+void graphics_task_exit(int pid) {
+    if (owner_pid != pid) return;
+    owner_task = 0; owner_pid = input_focus = 0;
+    input_reset();
+    console_graphics_mode(0);
 }

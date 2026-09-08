@@ -53,7 +53,7 @@ uint64_t create_user_pml4(int idx, uint64_t user_phys_addr) {
     proc_pdpt[idx][2] = (uint64_t)pd[2] | 0x03;
     proc_pdpt[idx][3] = (uint64_t)pd[3] | 0x03;
     for (int j = 0; j < 512; j++) {
-        if (j == 5 || j == 8 || j == 9) {
+        if (j == 5 || j == 8 || j == 9 || j == 511) {
             proc_pd[idx][j] = 0;
         } else if (j == 4) {
             if (user_phys_addr)
@@ -314,4 +314,23 @@ void free_user_pages(uint64_t cr3, uint64_t va_start, uint64_t va_end) {
         pd_tbl[idx2] = 0;
         va = ((va >> 21) + 1) << 21;
     }
+}
+
+/* Reclaim only an empty leaf table, never the physical pages of shared views. */
+void reclaim_empty_pt(uint64_t cr3, uint64_t va) {
+    uint64_t *table = (uint64_t *)(uintptr_t)cr3;
+    unsigned shifts[] = {39, 30};
+    for (unsigned i = 0; i < 2; i++) {
+        uint64_t e = table[(va >> shifts[i]) & 511];
+        if (!(e & PTE_PRESENT) || (e & PTE_PS)) return;
+        table = (uint64_t *)(uintptr_t)(e & ~0xfffULL);
+    }
+    uint64_t *entry = &table[(va >> 21) & 511];
+    if (!(*entry & PTE_PRESENT) || (*entry & PTE_PS)) return;
+    uint64_t *pt = (uint64_t *)(uintptr_t)(*entry & ~0xfffULL);
+    for (unsigned i = 0; i < 512; i++) if (pt[i] & PTE_PRESENT) return;
+    uint64_t page = *entry & ~0xfffULL;
+    *entry = 0;
+    __asm__ volatile("invlpg (%0)" : : "r"(va) : "memory");
+    free_page(page);
 }

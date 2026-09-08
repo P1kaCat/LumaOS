@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "../include/graphics_abi.h"
 #include "../include/input_abi.h"
+#include "../include/surface_abi.h"
 static inline long call3(long number, uint64_t a, uint64_t b, uint64_t c) {
     __asm__ volatile("int $0x80" : "+a"(number) : "D"(a), "S"(b), "d"(c) : "memory", "cc");
     return number;

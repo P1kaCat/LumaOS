@@ -45,6 +45,7 @@ void pit_init(uint32_t freq);
 void sched_init(void);
 void task_create(void (*entry)(void), int id);
 int proc_create_user(uint64_t code_addr, uint64_t stack_top, uint64_t cr3, uint64_t heap_base);
+struct task *proc_find_user(int pid);
 void proc_terminate(int pid);
 int proc_current_pid(void);
 void sched_tick(void);

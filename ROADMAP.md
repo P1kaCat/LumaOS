@@ -409,7 +409,7 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
   (ABI v2; bounds/pointer checks, second-process rejection, 23/23 Ubuntu CI
   on `640a543`: [validation](https://github.com/P1kaCat/LumaOS/actions/runs/34234501512)).
 - [x] Ring 3 keyboard/mouse event interface (local QEMU + bounded queue tests PASS; CI pending)
-- [ ] Inter-process surface sharing for application windows
+- [x] Inter-process surface sharing for application windows (bounded RW/RO views, local QEMU PASS; CI pending)
 - [ ] Windows
 - [ ] Isolated userspace compositor (user-approved architecture, 2026-09-08)
 - [ ] LumaOS desktop

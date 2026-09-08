@@ -12,6 +12,7 @@
 #include "console.h"
 #include "mouse.h"
 #include "graphics.h"
+#include "surface.h"
 #include <stdint.h>
 
 #define COM1 0x3F8
@@ -333,9 +334,10 @@ void irq_default_handler(uint8_t irq) {
  * need_write: if 1, require PTE_WRITABLE in addition to PTE_PRESENT|PTE_USER.
  * Returns 1 if valid, 0 otherwise. */
 static int validate_user_ptr(uint64_t addr, uint32_t len, int need_write) {
-    if (addr < USER_ADDR_MIN || addr >= USER_HEAP_MAX)
+    if (!((addr >= USER_ADDR_MIN && addr < USER_HEAP_MAX) ||
+          (addr >= USER_SHARED_BASE && addr < USER_SHARED_END)))
         return 0;
-    if (len > 0 && (addr + len) > USER_HEAP_MAX)
+    if (len > 0 && (addr + len) > (addr < USER_HEAP_MAX ? USER_HEAP_MAX : USER_SHARED_END))
         return 0;
 
     /* Must have a current user process with its own CR3 */
@@ -555,6 +557,18 @@ void syscall_handler(struct registers *regs) {
             break;
         }
 
+        case LUMAOS_SYS_SURFACE: {
+            if (!sched_current || !sched_current->is_user ||
+                !validate_user_ptr(regs->rdi, sizeof(struct lumaos_surface_request), 1)) {
+                regs->rax = (uint64_t)-1; break;
+            }
+            struct lumaos_surface_request request = *(struct lumaos_surface_request *)(uintptr_t)regs->rdi;
+            int result = surface_request(&request, proc_current_pid());
+            if (!result && request.op != LUMAOS_SURFACE_CLOSE)
+                *(struct lumaos_surface_request *)(uintptr_t)regs->rdi = request;
+            regs->rax = (uint64_t)result;
+            break;
+        }
         case LUMAOS_SYS_INPUT_READ:
             if (!regs->rsi || regs->rsi > LUMAOS_INPUT_BATCH ||
                 !validate_user_ptr(regs->rdi, (uint32_t)regs->rsi * sizeof(struct lumaos_input_event), 1)) {

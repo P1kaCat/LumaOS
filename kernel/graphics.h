@@ -15,6 +15,8 @@ int graphics_validate_present(const struct lumaos_surface_present *present);
 /* User rows must already have been validated readable by the syscall boundary. */
 int graphics_present(const struct lumaos_surface_present *present, int pid);
 
+void graphics_task_exit(int pid);
+int graphics_owner_pid(void);
 int graphics_is_owner(int pid);
 int graphics_read_input(struct lumaos_input_event *events, uint32_t count, int pid);
 int graphics_key_event(uint32_t code, uint32_t value, uint32_t flags);
