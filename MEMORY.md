@@ -1,5 +1,26 @@
 # MEMORY.md — LumaOS
 
+## Checkpoint publication des surfaces — 2026-09-09
+
+Syscall 19 : COMMIT copie un rectangle borné du brouillon RW vers une copie
+publiée RO ; DAMAGE retourne la réunion bornée des changements et verrouille
+la copie jusqu'à ACK(serial). COMMIT retourne -2 pendant cette lecture.
+Grant conserve le comportement précédent en publiant une première image complète.
+Tests hôte : rollback draft/copie, isolation, rectangles invalides, fusion,
+snapshot inchangé sans commit, ACK invalide et déverrouillage à la fermeture PASS.
+Tests Ring 3 et QEMU PASS, 23/23 historiques, pages 7619 == 7619. CI à venir
+à la fin du bloc multi-applications.
+
+## Validation manuelle rapportée par l'utilisateur — 2026-09-09
+
+Sur `5488a58`, avec `make run` : boot, shell, lancement de `desktop.elf`,
+chargement ELF, producteur `paint.elf`, deux fenêtres, souris et déplacement
+réel des fenêtres PASS. Le journal contient le partage RO du producteur,
+`[DESKTOP9] ready` et deux occurrences de `[DESKTOP9] moved`.
+V, X, routage clavier entre applications et pages après fermeture ne sont
+pas validés manuellement par ce test. Les validations automatisées précédentes
+restent distinctes de ce retour utilisateur.
+
 ## Bloc Input Ring 3 et compositeur utilisateur — 2026-09-09
 
 - `9935119` : syscall 17 non bloquant, ABI événement de 24 octets, file bornée

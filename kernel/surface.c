@@ -8,6 +8,8 @@ struct surface {
     uint32_t generation, width, height, pages;
     int owner, reader;
     uint64_t physical[16];
+    uint64_t published[16];
+    uint32_t serial, pending, locked, x, y, right, bottom;
 };
 static struct surface surfaces[LUMAOS_SURFACE_SLOTS];
 
@@ -23,7 +25,7 @@ static int map_view(struct surface *s, unsigned slot, int pid, int writable) {
     if (!t) return -1;
     unsigned i;
     for (i = 0; i < s->pages; i++) {
-        if (map_page(t->cr3, address(slot) + i * PAGE_SIZE, s->physical[i],
+        if (map_page(t->cr3, address(slot) + i * PAGE_SIZE, writable ? s->physical[i] : s->published[i],
                      PTE_USER | PTE_PRESENT | (writable ? PTE_WRITABLE : 0))) break;
     }
     if (i == s->pages) return 0;
@@ -33,7 +35,9 @@ static int map_view(struct surface *s, unsigned slot, int pid, int writable) {
 }
 static void collect(struct surface *s) {
     if (s->owner || s->reader) return;
-    for (unsigned i = 0; i < s->pages; i++) free_page(s->physical[i]);
+    for (unsigned i = 0; i < s->pages; i++) {
+        free_page(s->physical[i]); free_page(s->published[i]);
+    }
     s->pages = 0;
 }
 void surface_cleanup(int pid) {
@@ -42,7 +46,7 @@ void surface_cleanup(int pid) {
         if (s->owner == pid || s->reader == pid) {
             unmap_view(s, i, pid);
             if (s->owner == pid) s->owner = 0;
-            if (s->reader == pid) s->reader = 0;
+            if (s->reader == pid) { s->reader = 0; s->locked = 0; }
             collect(s);
         }
     }
@@ -68,12 +72,19 @@ int surface_request(struct lumaos_surface_request *r, int pid) {
             /* Never wrap a handle generation into a stale capability. */
             if (s->pages || s->generation == 0x3fffffff) continue;
             s->width = r->width; s->height = r->height;
+            s->serial = s->pending = s->locked = 0;
             unsigned count = (r->width * r->height * 4 + PAGE_SIZE - 1) / PAGE_SIZE;
             for (s->pages = 0; s->pages < count; s->pages++) {
                 uint64_t page = alloc_page();
                 if (!page) { collect(s); return -1; }
+                uint64_t published = alloc_page();
+                if (!published) { free_page(page); collect(s); return -1; }
                 s->physical[s->pages] = page;
-                for (unsigned n = 0; n < PAGE_SIZE / 8; n++) ((uint64_t *)(uintptr_t)page)[n] = 0;
+                s->published[s->pages] = published;
+                for (unsigned n = 0; n < PAGE_SIZE / 8; n++) {
+                    ((uint64_t *)(uintptr_t)page)[n] = 0;
+                    ((uint64_t *)(uintptr_t)published)[n] = 0;
+                }
             }
             if (map_view(s, i, pid, 1)) { collect(s); return -1; }
             s->owner = pid; ++s->generation;
@@ -92,11 +103,53 @@ int surface_request(struct lumaos_surface_request *r, int pid) {
         if (s->owner != pid || !r->peer || r->peer == (unsigned)pid || s->reader ||
             !graphics_is_owner((int)r->peer) || map_view(s, slot, r->peer, 0)) return -1;
         s->reader = r->peer;
+        for (unsigned i = 0; i < s->pages; i++)
+            for (unsigned n = 0; n < PAGE_SIZE / 8; n++)
+                ((uint64_t *)(uintptr_t)s->published[i])[n] = ((uint64_t *)(uintptr_t)s->physical[i])[n];
+        s->serial = 1; s->pending = 1; s->locked = 0;
+        s->x = s->y = 0; s->right = s->width; s->bottom = s->height;
     } else if (r->op == LUMAOS_SURFACE_CLOSE) {
         unmap_view(s, slot, pid);
         if (s->owner == pid) s->owner = 0;
-        if (s->reader == pid) s->reader = 0;
+        if (s->reader == pid) { s->reader = 0; s->locked = 0; }
         collect(s); return 0;
     } else if (r->op != LUMAOS_SURFACE_INFO && r->op != LUMAOS_SURFACE_ENUM) return -1;
     describe(r, s, slot); return 0;
+}
+
+int surface_update(struct lumaos_surface_update *r, int pid) {
+    struct surface *s = &surfaces[r->handle & 3];
+    if (!proc_find_user(pid) || !s->pages || (r->handle >> 2) != s->generation || r->reserved) return -1;
+    if (r->op == LUMAOS_UPDATE_COMMIT) {
+        if (s->owner != pid || r->serial || !r->width || !r->height ||
+            (uint64_t)r->x + r->width > s->width || (uint64_t)r->y + r->height > s->height) return -1;
+        if (s->locked) return -2;
+        if (s->serial == UINT32_MAX) return -1;
+        for (unsigned y = r->y; y < r->y + r->height; y++)
+            for (unsigned x = r->x; x < r->x + r->width; x++) {
+                unsigned offset = (y * s->width + x) * 4, page = offset / PAGE_SIZE;
+                unsigned word = (offset % PAGE_SIZE) / 4;
+                ((uint32_t *)(uintptr_t)s->published[page])[word] = ((uint32_t *)(uintptr_t)s->physical[page])[word];
+            }
+        if (!s->pending) { s->x = r->x; s->y = r->y; s->right = r->x+r->width; s->bottom = r->y+r->height; }
+        else {
+            if (r->x < s->x) s->x = r->x;
+            if (r->y < s->y) s->y = r->y;
+            if (r->x+r->width > s->right) s->right = r->x+r->width;
+            if (r->y+r->height > s->bottom) s->bottom = r->y+r->height;
+        }
+        s->pending = 1; r->serial = ++s->serial; return 0;
+    }
+    if (s->reader != pid || !graphics_is_owner(pid) || r->x || r->y || r->width || r->height) return -1;
+    if (r->op == LUMAOS_UPDATE_DAMAGE) {
+        if (r->serial) return -1;
+        if (!s->pending) return 0;
+        s->locked = 1;
+        r->x = s->x; r->y = s->y; r->width = s->right-s->x; r->height = s->bottom-s->y;
+        r->serial = s->serial; return 1;
+    }
+    if (r->op == LUMAOS_UPDATE_ACK && s->locked && r->serial == s->serial) {
+        s->locked = s->pending = 0; return 0;
+    }
+    return -1;
 }

@@ -266,6 +266,8 @@ print('PASS: actual Ring 3 input delivery and invalid-buffer checks')
 
 assert '[SURFACE9] FAILED' not in log and '[SURFACE9] producer FAILED' not in log
 assert '[SURFACE9] bounds, ownership, stale handles, sharing and producer exit passed' in log
+assert '[UPDATE9] producer commit and invalid requests passed' in log
+assert '[UPDATE9] reader damage, ACK and empty read passed' in log
 print('PASS: shared surfaces, read-only recipient, stale handles and termination cleanup')
 
 assert '[DESKTOP9] FAILED' not in log

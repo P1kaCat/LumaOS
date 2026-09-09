@@ -33,6 +33,14 @@ void _start(void) {
         sleep_ticks(1);
     }
     check(r.width == 128 && r.height == 80);
+    struct lumaos_surface_update u = {.op = LUMAOS_UPDATE_DAMAGE, .handle = r.handle};
+    check(call3(19, (uintptr_t)&u, sizeof(u), 0) == 1);
+    check(u.width == 128 && u.height == 80 && u.serial == 2);
+    u = (struct lumaos_surface_update){.op = LUMAOS_UPDATE_ACK, .handle = r.handle, .serial = 2};
+    check(call3(19, (uintptr_t)&u, sizeof(u), 0) == 0);
+    u = (struct lumaos_surface_update){.op = LUMAOS_UPDATE_DAMAGE, .handle = r.handle};
+    check(call3(19, (uintptr_t)&u, sizeof(u), 0) == 0);
+    say("[UPDATE9] reader damage, ACK and empty read passed\n");
     check(*(volatile uint32_t *)(uintptr_t)r.address != 0);
     check(call3(17, r.address, 1, 0) == -1); /* kernel copy-out cannot write RO view */
     uint64_t read_only_address = r.address;
