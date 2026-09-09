@@ -47,7 +47,7 @@ $(BUILD_DIR)/mem.o: mem.c mem.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c mem.c -o $@
 
-$(BUILD_DIR)/sched.o: surface.h ../include/surface_abi.h sched.c sched.h cpu.h mem.h user.h
+$(BUILD_DIR)/sched.o: surface.h graphics.h ../include/surface_abi.h sched.c sched.h cpu.h mem.h user.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c sched.c -o $@
 

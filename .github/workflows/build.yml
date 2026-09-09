@@ -34,6 +34,7 @@ jobs:
         run: |
           python3 tests/test_console.py
           python3 tests/test_input.py
+          python3 tests/test_surface.py
 
       - name: Verify build artifacts
         run: |
@@ -56,7 +57,7 @@ jobs:
   qemu-test:
     name: QEMU Boot Test
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
 

@@ -51,7 +51,7 @@ bootloader:
 	$(MAKE) -C boot/efi
 
 # userprogs : build standalone ELF64 user programs
-userprogs: $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf
+userprogs: $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf $(BUILD_DIR)/userprogs/desktop.elf
 
 $(USERPROG_ELF): $(USERPROG_DIR)/hello.S $(USERPROG_DIR)/userprog.ld
 	@echo "=== Building user program (ELF64) ==="
@@ -72,7 +72,7 @@ image: kernel bootloader
 # disk : create FAT32 disk image with user programs (Phase 6)
 disk: userprogs
 	@echo "=== Creating FAT32 disk image ==="
-	$(PYTHON) tools/create_disk.py $(DISK_IMG) $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf
+	$(PYTHON) tools/create_disk.py $(DISK_IMG) $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf $(BUILD_DIR)/userprogs/desktop.elf
 
 # run : build + QEMU avec OVMF + data disk
 # Empty USB hub is an enumeration fixture; keyboard/mouse stay on PS/2.

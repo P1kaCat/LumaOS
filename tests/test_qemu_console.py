@@ -89,6 +89,46 @@ wait_marker('[INPUT9] keys, pointer, buttons, empty read and invalid buffers pas
 for key in list('run surftest.elf') + ['ret']:
     send_key({' ': 'spc', '.': 'dot'}.get(key, key))
 wait_marker('[SURFACE9] bounds, ownership, stale handles, sharing and producer exit passed')
+def monitor(command):
+    s.sendall((command + '\n').encode())
+    time.sleep(0.6)
+    s.recv(4096)
+# Two complete compositor lifecycles; markers must belong to each fresh launch.
+for cycle in range(2):
+    previous = Path('build/console-serial.log').read_text(errors='replace').count('[DESKTOP9] ready:')
+    for key in list('run desktop.elf') + ['ret']:
+        send_key({' ': 'spc', '.': 'dot'}.get(key, key))
+    deadline = time.monotonic() + 15
+    while Path('build/console-serial.log').read_text(errors='replace').count('[DESKTOP9] ready:') <= previous:
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Compositor did not become ready')
+        time.sleep(0.05)
+    if cycle == 0:
+        monitor('screendump build/desktop-initial.ppm')
+        import re
+        header = Path('build/desktop-initial.ppm').read_bytes()
+        width, height = map(int, re.match(rb'P6\s+(\d+)\s+(\d+)', header).groups())
+        # Input test left the pointer at screen centre + (16,12).
+        monitor(f'mouse_move {90-(width//2+16)} {115-(height//2+12)}')
+        monitor('mouse_button 1')
+        monitor('mouse_move 70 30')
+        monitor('mouse_move 70 30')
+        monitor('mouse_button 0')
+        wait_marker('[DESKTOP9] moved')
+        monitor('screendump build/desktop-moved.ppm')
+        send_key('v')
+        wait_marker('[DESKTOP9] hidden')
+        monitor('screendump build/desktop-hidden.ppm')
+        send_key('v')
+        wait_marker('[DESKTOP9] shown')
+        monitor('screendump build/desktop-shown.ppm')
+    send_key('x')
+    deadline = time.monotonic() + 15
+    while Path('build/console-serial.log').read_text(errors='replace').count('[DESKTOP9] closed;') <= previous:
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Compositor failed to close')
+        time.sleep(0.05)
+
 
 """
 if options.repeat_exec:
@@ -101,7 +141,9 @@ serial = Path('build/console-serial.log')
 serial.unlink(missing_ok=True)
 for capture in ('build/console-before.ppm', 'build/console-after.ppm',
                 'build/pointer-moved.ppm', 'build/pointer-pressed.ppm',
-                'build/pointer-restored.ppm'):
+                'build/pointer-restored.ppm', 'build/desktop-initial.ppm',
+                'build/desktop-moved.ppm', 'build/desktop-hidden.ppm',
+                'build/desktop-shown.ppm'):
     Path(capture).unlink(missing_ok=True)
 with open('build/console-qemu.log', 'w') as log_file:
     process = subprocess.Popen(['qemu-system-x86_64'] + args, stdout=log_file,
@@ -225,3 +267,24 @@ print('PASS: actual Ring 3 input delivery and invalid-buffer checks')
 assert '[SURFACE9] FAILED' not in log and '[SURFACE9] producer FAILED' not in log
 assert '[SURFACE9] bounds, ownership, stale handles, sharing and producer exit passed' in log
 print('PASS: shared surfaces, read-only recipient, stale handles and termination cleanup')
+
+assert '[DESKTOP9] FAILED' not in log
+assert log.count('[DESKTOP9] ready:') == 2
+assert log.count('[DESKTOP9] closed; shell restored') == 2
+frames = [ppm('build/desktop-' + name + '.ppm') for name in ('initial', 'moved', 'hidden', 'shown')]
+assert all((fw, fh) == (w, h) for fw, fh, _ in frames)
+initial, moved, hidden, shown = [frame[2] for frame in frames]
+def pixel(frame, x, y):
+    return frame[((y+40)*w+x)*3:((y+40)*w+x)*3+3]
+background, title = bytes((18,26,42)), bytes((62,94,146))
+assert pixel(initial, 90, 80) == title
+assert pixel(moved, 90, 80) == background, 'old window area was not repainted'
+assert pixel(moved, 250, 140) == title, 'dragged window position is wrong'
+assert pixel(hidden, 250, 140) == background, 'window visibility did not change'
+assert pixel(moved, 270, 155) != title and pixel(hidden, 270, 155) == title, 'front-to-back composition failed'
+assert moved == shown, 'visibility toggle did not restore the exact composed frame'
+assert all(frame[:w*40*3] == before[:w*40*3] for frame in (initial, moved, hidden, shown))
+print('PASS: isolated Ring 3 compositor, shared pixels, drag, z-order, visibility and two clean lifecycles')
+
+assert re.search(r'\[SURFACE9\] read-only write probe\n[\s\S]*?Page fault in Ring 3 \(CR2=0x3FE00000\)[\s\S]*?terminated \(page fault\)', log, re.IGNORECASE), 'read-only user store did not fault'
+print('PASS: direct write to read-only shared view faults in Ring 3; kernel and shell survive')

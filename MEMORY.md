@@ -1,5 +1,42 @@
 # MEMORY.md — LumaOS
 
+## Bloc Input Ring 3 et compositeur utilisateur — 2026-09-09
+
+- `9935119` : syscall 17 non bloquant, ABI événement de 24 octets, file bornée
+  à 64 entrées et lectures de 1 à 16 événements. Types clavier set 1, pointeur
+  absolu dans le viewport et débordement ; zéro signifie aucune entrée.
+  Le présentateur obtient le focus au premier appel valide. Les buffers sont
+  vérifiés sur toutes leurs pages ; aucun objet kernel n'est exposé.
+- `2db1c1b` : syscall 18 et requête de 40 octets pour créer, partager, consulter,
+  énumérer et fermer des vues. Quatre surfaces de 128 × 128 pixels au maximum.
+  Producteur RW, présentateur explicitement autorisé RO, handles générationnels.
+  Vues à `0x3FE00000`, séparées du heap et du pool physique. Les pixels restent
+  vivants jusqu'à la dernière vue ; les pages et tables vides sont récupérées
+  à la fermeture ou à la terminaison, y compris après une faute Ring 3.
+- `desktop.elf` : compositeur isolé en Ring 3. `paint.elf` produit une surface,
+  accorde sa vue puis termine. Deux fenêtres minimales utilisent ses pixels.
+  Position, dimensions, visibilité, focus et ordre d'affichage restent dans le
+  processus utilisateur. Composition CPU par tuiles, présentation via ABI v2.
+  Glisser une barre de titre déplace la fenêtre ; V masque/affiche, X termine
+  le compositeur et restaure la console. Lancement : `run desktop.elf`.
+- Validation locale depuis `make clean` : build complet, tests hôte du renderer,
+  des entrées et des surfaces PASS. QEMU : **23/23**, pages **7620 == 7620**.
+  Tests supplémentaires : entrées réelles, buffers invalides, épuisement des
+  slots, rollback à chaque échec d'allocation/mapping, partage RO, anciens
+  handles, deux ordres de terminaison, écriture RO tuant uniquement l'utilisateur,
+  déplacement/recouvrement/visibilité vérifiés par captures et deux cycles du
+  compositeur. Profil run + huit exécutions ELF : **23/23**, pages **7637 == 7637**.
+  CI en attente du push de ce bloc.
+- Limites volontaires : un présentateur, un destinataire RO par surface,
+  dimensions immuables, quatre processus simultanés, deux fenêtres de démonstration.
+  Pas encore de protocole de commit des pixels, de notifications de dommages,
+  de routage d'événements vers les applications ni de bureau complet.
+  Le support NX reste une limitation préexistante du paging.
+- Prochain bloc : publication explicite des mises à jour de surfaces, rectangles
+  modifiés et routage du focus vers les clients, avant d'étendre le bureau.
+  Les primitives graphiques existantes, le correctif CP1252 et les 23 marqueurs
+  historiques sont conservés. `fix_kernel.py` reste local et hors Git.
+
 Ce document décrit l'architecture mémoire, le système de fichiers, les appels système et l'état des sous-systèmes matériels de LumaOS.
 
 ## État validé — 2026-09-08
