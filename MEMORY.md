@@ -1,5 +1,19 @@
 # MEMORY.md — LumaOS
 
+## Routage des applications — 2026-09-09
+
+Syscall 20, requête de 32 octets : READ pour le producteur, SEND et FOCUS
+réservés au présentateur ayant reçu la surface. File FIFO de 32 événements
+par surface ; -2 indique une pression de file, sans perte silencieuse.
+Les changements de focus notifient ancien/nouveau clients atomiquement ; les
+touches vers une surface non focalisée et les coordonnées hors contenu sont
+refusées. Hit testing, capture et ordre des fenêtres restent en Ring 3.
+Le pool CR3 passe de quatre à cinq processus pour init, shell, compositeur et
+deux clients ; la limite du scheduler reste huit tâches au total.
+Tests hôte des droits, des coordonnées et des files pleines PASS ; la base
+QEMU avec rendu partiel conserve 23/23, pages 7624 == 7624.
+La validation complète multi-applications et CI est encore en cours.
+
 ## Checkpoint publication des surfaces — 2026-09-09
 
 Syscall 19 : COMMIT copie un rectangle borné du brouillon RW vers une copie

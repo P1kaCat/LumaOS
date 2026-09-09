@@ -12,7 +12,7 @@ out = root / 'build/tests'
 out.mkdir(parents=True, exist_ok=True)
 libfile = out / ('surface.dll' if os.name == 'nt' else 'surface.so')
 exports = ['surface_request', 'surface_cleanup', 'budgets', 'outstanding',
-           'mapping_count', 'mapping_flags', 'fixture_errors', 'surface_update', 'read_pixel', 'write_pixel']
+           'mapping_count', 'mapping_flags', 'fixture_errors', 'surface_update', 'surface_route', 'read_pixel', 'write_pixel']
 cmd = ['clang', '-O2', '-ffreestanding', '-shared', '-nostdlib', '-Wall', '-Wextra',
        '-Werror', str(root/'kernel/surface.c'), str(root/'tests/surface_fixture.c'), '-o', str(libfile)]
 cmd += (['-fuse-ld=lld', '-Wl,/noentry'] + ['-Wl,/export:'+n for n in exports]
@@ -103,3 +103,47 @@ update(1, op=1, handle=h, width=1,height=1)
 lib.surface_cleanup(1)
 clean()
 print('PASS: explicit snapshot publication, bounded/coalesced damage, ACK, busy and invalid requests')
+
+class Event(C.Structure):
+    _fields_ = [('type', C.c_uint32), ('code', C.c_uint32), ('x', C.c_int32), ('y', C.c_int32), ('value', C.c_uint32), ('flags', C.c_uint32)]
+class Route(C.Structure):
+    _fields_ = [('op', C.c_uint32), ('handle', C.c_uint32), ('event', Event)]
+assert C.sizeof(Route) == 32
+lib.surface_route.argtypes = [C.POINTER(Route), C.c_int]
+def route(pid, op, handle, expected=0, event=None):
+    r = Route(op=op, handle=handle, event=event or Event())
+    assert lib.surface_route(C.byref(r), pid) == expected, (pid,op,handle)
+    return r.event
+h1 = request(1, op=1,width=128,height=80).handle
+h2 = request(3, op=1,width=128,height=80).handle
+request(1, op=2,handle=h1,peer=2)
+request(3, op=2,handle=h2,peer=2)
+key = Event(type=1,code=35,value=104,flags=1)
+route(1,3,h1,-1)
+route(2,2,h1,-1,key) # no focus
+route(2,3,h1)
+assert route(1,1,h1,1).value == 1
+route(2,2,h1,0,key)
+assert route(1,1,h1,1).value == 104
+route(3,1,h1,-1)
+route(2,2,h2,-1,key)
+route(2,2,h1,-1,Event(type=2,code=1,x=128,y=0))
+route(2,2,h1,-1,Event(type=2,code=1,x=-1,y=0))
+route(1,2,h1,-1,key)
+route(2,3,h2)
+assert route(1,1,h1,1).value == 0
+assert route(3,1,h2,1).value == 1
+for _ in range(32): route(2,2,h2,0,key)
+route(2,2,h2,-2,key)
+route(2,3,h1,-2) # full old queue: focus change is atomic
+route(1,1,h1,0)
+for _ in range(32): assert route(3,1,h2,1).value == 104
+route(2,3,h1)
+assert route(3,1,h2,1).value == 0
+assert route(1,1,h1,1).value == 1
+route(2,3,0)
+assert route(1,1,h1,1).value == 0
+route(2,2,h1,-1,key)
+for pid in (1,2,3): lib.surface_cleanup(pid)
+clean()
+print('PASS: per-client input isolation, focus, coordinate bounds and atomic queue-pressure handling')

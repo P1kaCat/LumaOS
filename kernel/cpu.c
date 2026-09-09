@@ -557,6 +557,16 @@ void syscall_handler(struct registers *regs) {
             break;
         }
 
+        case LUMAOS_SYS_ROUTE: {
+            if (regs->rsi != sizeof(struct lumaos_route) ||
+                !validate_user_ptr(regs->rdi, sizeof(struct lumaos_route), 1)) {
+                regs->rax = (uint64_t)-1; break;
+            }
+            struct lumaos_route request = *(struct lumaos_route *)(uintptr_t)regs->rdi;
+            int result = surface_route(&request, proc_current_pid());
+            if (result >= 0) *(struct lumaos_route *)(uintptr_t)regs->rdi = request;
+            regs->rax = (uint64_t)result; break;
+        }
         case LUMAOS_SYS_SURFACE_UPDATE: {
             if (regs->rsi != sizeof(struct lumaos_surface_update) ||
                 !validate_user_ptr(regs->rdi, sizeof(struct lumaos_surface_update), 1)) {

@@ -35,7 +35,7 @@ $(BUILD_DIR)/kernel.o: kernel.c cpu.h mem.h sched.h user.h ata.h fat32.h vfs.h p
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c kernel.c -o $@
 
-$(BUILD_DIR)/cpu.o: surface.h ../include/surface_abi.h cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h console.h mouse.h graphics.h ../include/input_abi.h ../include/graphics_abi.h ../include/handoff.h
+$(BUILD_DIR)/cpu.o: surface.h ../include/surface_abi.h ../include/route_abi.h cpu.c cpu.h sched.h mem.h vfs.h user.h apic.h console.h mouse.h graphics.h ../include/input_abi.h ../include/graphics_abi.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c cpu.c -o $@
 
@@ -47,7 +47,7 @@ $(BUILD_DIR)/mem.o: mem.c mem.h ../include/handoff.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c mem.c -o $@
 
-$(BUILD_DIR)/sched.o: surface.h graphics.h ../include/surface_abi.h sched.c sched.h cpu.h mem.h user.h
+$(BUILD_DIR)/sched.o: surface.h graphics.h ../include/surface_abi.h ../include/route_abi.h sched.c sched.h cpu.h mem.h user.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c sched.c -o $@
 
@@ -147,6 +147,6 @@ $(BUILD_DIR)/input.o: input.c input.h ../include/input_abi.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c input.c -o $@
 
-$(BUILD_DIR)/surface.o: surface.c surface.h mem.h sched.h graphics.h ../include/surface_abi.h
+$(BUILD_DIR)/surface.o: surface.c surface.h mem.h sched.h graphics.h ../include/surface_abi.h ../include/route_abi.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(KERNEL_CFLAGS) -c surface.c -o $@

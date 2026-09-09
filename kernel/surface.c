@@ -10,8 +10,16 @@ struct surface {
     uint64_t physical[16];
     uint64_t published[16];
     uint32_t serial, pending, locked, x, y, right, bottom;
+    struct lumaos_input_event events[LUMAOS_CLIENT_QUEUE];
+    unsigned first, used;
 };
 static struct surface surfaces[LUMAOS_SURFACE_SLOTS];
+static uint32_t focused_handle;
+
+static void reset_route(struct surface *s, unsigned slot) {
+    if (focused_handle == ((s->generation << 2) | slot)) focused_handle = 0;
+    s->first = s->used = 0;
+}
 
 static uint64_t address(unsigned slot) { return USER_SHARED_BASE + slot * SLOT_BYTES; }
 static void unmap_view(struct surface *s, unsigned slot, int pid) {
@@ -44,6 +52,7 @@ void surface_cleanup(int pid) {
     for (unsigned i = 0; i < LUMAOS_SURFACE_SLOTS; i++) {
         struct surface *s = &surfaces[i];
         if (s->owner == pid || s->reader == pid) {
+            reset_route(s, i);
             unmap_view(s, i, pid);
             if (s->owner == pid) s->owner = 0;
             if (s->reader == pid) { s->reader = 0; s->locked = 0; }
@@ -73,6 +82,7 @@ int surface_request(struct lumaos_surface_request *r, int pid) {
             if (s->pages || s->generation == 0x3fffffff) continue;
             s->width = r->width; s->height = r->height;
             s->serial = s->pending = s->locked = 0;
+            s->first = s->used = 0;
             unsigned count = (r->width * r->height * 4 + PAGE_SIZE - 1) / PAGE_SIZE;
             for (s->pages = 0; s->pages < count; s->pages++) {
                 uint64_t page = alloc_page();
@@ -109,12 +119,57 @@ int surface_request(struct lumaos_surface_request *r, int pid) {
         s->serial = 1; s->pending = 1; s->locked = 0;
         s->x = s->y = 0; s->right = s->width; s->bottom = s->height;
     } else if (r->op == LUMAOS_SURFACE_CLOSE) {
+        reset_route(s, slot);
         unmap_view(s, slot, pid);
         if (s->owner == pid) s->owner = 0;
         if (s->reader == pid) { s->reader = 0; s->locked = 0; }
         collect(s); return 0;
     } else if (r->op != LUMAOS_SURFACE_INFO && r->op != LUMAOS_SURFACE_ENUM) return -1;
     describe(r, s, slot); return 0;
+}
+
+static struct surface *from_handle(unsigned handle) {
+    struct surface *s = &surfaces[handle & 3];
+    return s->pages && (handle >> 2) == s->generation ? s : 0;
+}
+static int empty_event(const struct lumaos_input_event *e) {
+    return !(e->type || e->code || e->x || e->y || e->value || e->flags);
+}
+static void enqueue(struct surface *s, struct lumaos_input_event e) {
+    s->events[(s->first+s->used++) % LUMAOS_CLIENT_QUEUE] = e;
+}
+int surface_route(struct lumaos_route *r, int pid) {
+    if (!proc_find_user(pid)) return -1;
+    struct surface *s = from_handle(r->handle);
+    if (r->op == LUMAOS_ROUTE_FOCUS) {
+        if (!graphics_is_owner(pid) || !empty_event(&r->event)) return -1;
+        if (r->handle && (!s || s->reader != pid || !s->owner)) return -1;
+        struct surface *old = from_handle(focused_handle);
+        if (!old || old->reader != pid || !old->owner) { old = 0; focused_handle = 0; }
+        if (focused_handle == r->handle) return 0;
+        if ((old && old->used == LUMAOS_CLIENT_QUEUE) || (s && s->used == LUMAOS_CLIENT_QUEUE)) return -2;
+        if (old) enqueue(old, (struct lumaos_input_event){.type=LUMAOS_INPUT_FOCUS,.value=0});
+        if (s) enqueue(s, (struct lumaos_input_event){.type=LUMAOS_INPUT_FOCUS,.value=1});
+        focused_handle = r->handle; return 0;
+    }
+    if (!s) return -1;
+    if (r->op == LUMAOS_ROUTE_READ) {
+        if (s->owner != pid || !empty_event(&r->event) || !s->reader || !graphics_is_owner(s->reader)) return -1;
+        if (!s->used) return 0;
+        r->event = s->events[s->first];
+        s->first = (s->first+1) % LUMAOS_CLIENT_QUEUE; --s->used; return 1;
+    }
+    if (r->op != LUMAOS_ROUTE_SEND || s->reader != pid || !s->owner || !graphics_is_owner(pid)) return -1;
+    struct lumaos_input_event *e = &r->event;
+    if (e->type == LUMAOS_INPUT_KEY) {
+        if (focused_handle != r->handle || e->x || e->y || e->code > 127 || e->value > 127 ||
+            (e->flags & ~(LUMAOS_INPUT_DOWN|LUMAOS_INPUT_EXTENDED))) return -1;
+    } else if (e->type == LUMAOS_INPUT_POINTER) {
+        if (e->code > 7 || e->flags || e->value || e->x < 0 || e->y < 0 ||
+            (unsigned)e->x >= s->width || (unsigned)e->y >= s->height) return -1;
+    } else return -1;
+    if (s->used == LUMAOS_CLIENT_QUEUE) return -2;
+    enqueue(s, *e); return 0;
 }
 
 int surface_update(struct lumaos_surface_update *r, int pid) {
