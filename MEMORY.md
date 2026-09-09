@@ -1,5 +1,39 @@
 # MEMORY.md — LumaOS
 
+## Bloc multi-applications et rendu partiel — 2026-09-09
+
+Le compositeur existant est conservé : `desktop.elf` exerce le producteur
+historique ; `multi.elf` compile le même compositeur avec `appa.elf` et
+`appb.elf`, deux processus Ring 3 vivants et deux surfaces distinctes.
+Chaque application peut modifier un carré de 8 × 8 après une touche reçue.
+Le compositeur copie les pixels publiés dans son cache privé avant ACK,
+puis ne présente que les rectangles invalidés. La liste de dommages est
+bornée à 16 rectangles, fusionne les intersections et revient au plein écran
+en cas de saturation. Déplacement, visibilité et activation invalident les
+zones nécessaires ; les barres de titre au premier plan occultent les clients
+derrière pour le hit testing. Cliquer le fond retire le focus clavier.
+
+Lancement : `make run`, puis `run multi.elf` dans le shell LumaOS.
+Cliquer un contenu sélectionne son application ; H/J modifient son carré.
+V masque/affiche la fenêtre au premier plan, X ferme le compositeur et ses
+clients ; F produit une image de référence complète, B compare huit redraws.
+Les syscalls 19/20 et les surfaces restent bornés ; ELF est limité à 32 Kio
+pour accueillir le compositeur multi-applications (environ 18 Kio).
+
+Validation locale après nettoyage : renderer, input, surfaces, routage et
+2 000 rectangles aléatoires PASS ; premier profil QEMU 23/23, pages
+7609 == 7609. Tests réels : deux clients, ciblage souris, focus/clavier isolé,
+aucune touche après clic sur le fond, transfert à la fenêtre visible,
+activation/recouvrement, mise à jour exacte de 64 pixels, égalité d'image
+partielle/complète et deux cycles de fermeture/recréation. Profil run avec huit
+exécutions ELF : 23/23, pages 7613 == 7613. CI en attente du push.
+
+Mesure locale au viewport 1280 × 760, huit redraws de 8 × 8 : plein écran
+7 782 400 pixels / 1 920 appels de présentation ; partiel 512 pixels / 8 appels.
+Ce sont des compteurs du travail réellement effectué (15 200× moins de pixels,
+240× moins d'appels pour ce cas), pas une mesure de temps, de FPS ni un gain
+général de performance. Les 23 attentes historiques restent inchangées.
+
 ## Routage des applications — 2026-09-09
 
 Syscall 20, requête de 32 octets : READ pour le producteur, SEND et FOCUS

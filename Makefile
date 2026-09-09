@@ -51,7 +51,7 @@ bootloader:
 	$(MAKE) -C boot/efi
 
 # userprogs : build standalone ELF64 user programs
-userprogs: $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf $(BUILD_DIR)/userprogs/desktop.elf
+userprogs: $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf $(BUILD_DIR)/userprogs/desktop.elf $(BUILD_DIR)/userprogs/multi.elf $(BUILD_DIR)/userprogs/appa.elf $(BUILD_DIR)/userprogs/appb.elf
 
 $(USERPROG_ELF): $(USERPROG_DIR)/hello.S $(USERPROG_DIR)/userprog.ld
 	@echo "=== Building user program (ELF64) ==="
@@ -72,7 +72,7 @@ image: kernel bootloader
 # disk : create FAT32 disk image with user programs (Phase 6)
 disk: userprogs
 	@echo "=== Creating FAT32 disk image ==="
-	$(PYTHON) tools/create_disk.py $(DISK_IMG) $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf $(BUILD_DIR)/userprogs/desktop.elf
+	$(PYTHON) tools/create_disk.py $(DISK_IMG) $(USERPROG_ELF) $(BUILD_DIR)/userprogs/input.elf $(BUILD_DIR)/userprogs/paint.elf $(BUILD_DIR)/userprogs/surftest.elf $(BUILD_DIR)/userprogs/desktop.elf $(BUILD_DIR)/userprogs/multi.elf $(BUILD_DIR)/userprogs/appa.elf $(BUILD_DIR)/userprogs/appb.elf
 
 # run : build + QEMU avec OVMF + data disk
 # Empty USB hub is an enumeration fixture; keyboard/mouse stay on PS/2.
@@ -126,7 +126,7 @@ clean:
 	@rm -rf $(BUILD_DIR)
 	@echo "=== Clean: build/ removed ==="
 
-$(BUILD_DIR)/userprogs/%.elf: $(USERPROG_DIR)/%.c $(USERPROG_DIR)/api.h $(USERPROG_DIR)/userprog.ld include/graphics_abi.h include/input_abi.h include/surface_abi.h
+$(BUILD_DIR)/userprogs/%.elf: $(USERPROG_DIR)/%.c $(USERPROG_DIR)/api.h $(USERPROG_DIR)/userprog.ld include/graphics_abi.h include/input_abi.h include/surface_abi.h include/route_abi.h $(USERPROG_DIR)/scene.h $(USERPROG_DIR)/client.h $(USERPROG_DIR)/desktop.c
 	@mkdir -p $(BUILD_DIR)/userprogs
 	$(CC) --target=x86_64-unknown-none -ffreestanding -nostdlib -O2 -Wall -Wextra -Werror -mno-red-zone -mno-sse -mno-sse2 -fno-stack-protector -fno-pic -c $< -o $(BUILD_DIR)/userprogs/$*.o
 	$(LD) -T $(USERPROG_DIR)/userprog.ld -nostdlib --oformat elf64-x86-64 -o $@ $(BUILD_DIR)/userprogs/$*.o

@@ -110,13 +110,13 @@ int surface_request(struct lumaos_surface_request *r, int pid) {
         if (r->handle) return -1;
     } else if ((r->handle >> 2) != s->generation) return -1;
     if (r->op == LUMAOS_SURFACE_GRANT) {
-        if (s->owner != pid || !r->peer || r->peer == (unsigned)pid || s->reader ||
+        if (s->owner != pid || !r->peer || r->peer == (unsigned)pid || s->reader || s->serial == UINT32_MAX ||
             !graphics_is_owner((int)r->peer) || map_view(s, slot, r->peer, 0)) return -1;
         s->reader = r->peer;
         for (unsigned i = 0; i < s->pages; i++)
             for (unsigned n = 0; n < PAGE_SIZE / 8; n++)
                 ((uint64_t *)(uintptr_t)s->published[i])[n] = ((uint64_t *)(uintptr_t)s->physical[i])[n];
-        s->serial = 1; s->pending = 1; s->locked = 0;
+        ++s->serial; s->pending = 1; s->locked = 0;
         s->x = s->y = 0; s->right = s->width; s->bottom = s->height;
     } else if (r->op == LUMAOS_SURFACE_CLOSE) {
         reset_route(s, slot);

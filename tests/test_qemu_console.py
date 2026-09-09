@@ -134,11 +134,74 @@ for cycle in range(2):
 if options.repeat_exec:
     extra = extra.replace("['help'] * 10 + ['pid', 'mem']",
                           "['run prog.elf'] * 6 + ['help'] * 10 + ['pid', 'mem']")
+
+extra += r"""
+def wait_count(marker, count):
+    deadline = time.monotonic() + 20
+    while Path('build/console-serial.log').read_text(errors='replace').count(marker) < count:
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Missing repeated marker: '+marker)
+        time.sleep(0.05)
+for cycle in range(2):
+    for key in list('run multi.elf') + ['ret']:
+        send_key({' ': 'spc', '.': 'dot', 'm': 'semicolon'}.get(key, key))
+    wait_count('[MULTI9] ready: two live applications', cycle+1)
+    wait_count('[CLIENT9 A] ready; isolation checks passed', cycle+1)
+    wait_count('[CLIENT9 B] ready; isolation checks passed', cycle+1)
+    if cycle == 0:
+        # Legacy desktop tests left the pointer at (230,175).
+        monitor('mouse_move -140 -35')
+        monitor('mouse_button 1');monitor('mouse_button 0')
+        wait_marker('[CLIENT9 A] pointer down')
+        wait_marker('[CLIENT9 A] focus gained')
+        monitor('screendump build/multi-before.ppm')
+        send_key('h')
+        wait_marker('[CLIENT9 A] key h')
+        wait_marker('[CLIENT9 A] published 8x8')
+        monitor('screendump build/multi-after.ppm')
+        send_key('f')
+        wait_marker('[REDRAW9] reference full frame')
+        monitor('screendump build/multi-full.ppm')
+        for command in ['mouse_move 90 40','mouse_move 90 40','mouse_button 1','mouse_button 0']:
+            monitor(command)
+        wait_marker('[CLIENT9 B] pointer down')
+        send_key('j')
+        wait_marker('[CLIENT9 B] key j')
+        wait_marker('[CLIENT9 B] published 8x8')
+        for command in ['mouse_move -125 -80','mouse_move -125 -80','mouse_button 1','mouse_button 0']:
+            monitor(command)
+        send_key('h') # background click cleared focus: no client may receive this
+        send_key('v') # hide B, transfer focus to visible A
+        send_key('h')
+        wait_count('[CLIENT9 A] key h', 2)
+        wait_count('[CLIENT9 A] published 8x8', 2)
+        send_key('v')
+        # Raise/drag A over B; a front title must not route to B's content.
+        for command in ['mouse_move 70 55','mouse_button 1','mouse_move 70 55',
+                        'mouse_move 70 55','mouse_button 0','mouse_move 40 0',
+                        'mouse_button 1','mouse_button 0','mouse_move 0 25',
+                        'mouse_button 1','mouse_button 0']:
+            monitor(command)
+        wait_count('[CLIENT9 A] pointer down', 2)
+        send_key('j')
+        wait_marker('[CLIENT9 A] key j')
+        wait_count('[CLIENT9 A] published 8x8', 3)
+        monitor('screendump build/multi-overlap.ppm')
+        send_key('b')
+        wait_marker('[REDRAW9] full pixels=')
+    send_key('x')
+    wait_count('[MULTI9] closed',cycle+1)
+    wait_count('[CLIENT9 A] presenter gone; exit',cycle+1)
+    wait_count('[CLIENT9 B] presenter gone; exit',cycle+1)
+"""
+
 harness = harness.replace('# Type "exit" + Enter', extra + '\n# Type "exit" + Enter')
 
 serial = Path('build/console-serial.log')
 # Never let output from a previous run satisfy the readiness check.
 serial.unlink(missing_ok=True)
+for name in ('before','after','full','overlap'):
+    Path('build/multi-'+name+'.ppm').unlink(missing_ok=True)
 for capture in ('build/console-before.ppm', 'build/console-after.ppm',
                 'build/pointer-moved.ppm', 'build/pointer-pressed.ppm',
                 'build/pointer-restored.ppm', 'build/desktop-initial.ppm',
@@ -290,3 +353,34 @@ print('PASS: isolated Ring 3 compositor, shared pixels, drag, z-order, visibilit
 
 assert re.search(r'\[SURFACE9\] read-only write probe\n[\s\S]*?Page fault in Ring 3 \(CR2=0x3FE00000\)[\s\S]*?terminated \(page fault\)', log, re.IGNORECASE), 'read-only user store did not fault'
 print('PASS: direct write to read-only shared view faults in Ring 3; kernel and shell survive')
+
+assert '[MULTI9] ready: two live applications' in log
+assert 'FAILED' not in '\n'.join(line for line in log.splitlines() if '[CLIENT9' in line)
+assert log.count('[CLIENT9 A] key h') == 2
+assert log.count('[CLIENT9 B] key h') == 0
+assert log.count('[CLIENT9 A] key j') == 1
+assert log.count('[CLIENT9 B] key j') == 1
+assert log.count('[CLIENT9 A] pointer down') == 2
+assert log.count('[CLIENT9 B] pointer down') == 1
+for client in ('A','B'):
+    assert log.count(f'[CLIENT9 {client}] presenter gone; exit') == 2
+mbw,mbh,mbefore=ppm('build/multi-before.ppm')
+maw,mah,mafter=ppm('build/multi-after.ppm')
+mfw,mfh,mfull=ppm('build/multi-full.ppm')
+assert (mbw,mbh)==(maw,mah)==(mfw,mfh)==(w,h)
+assert mafter==mfull, 'partial redraw differs from full reference'
+changes={(i%w,i//w) for i in range(w*h) if mbefore[i*3:i*3+3]!=mafter[i*3:i*3+3]}
+assert changes == {(x,y) for x in range(80,88) for y in range(126,134)}, '8x8 commit changed incorrect pixels'
+_,_,overlap=ppm('build/multi-overlap.ppm')
+assert pixel(overlap,270,185)==title
+# The cursor is at (270,250) in screen coordinates; sample the same overlap
+# outside its 12x16 footprint so pointer pixels cannot impersonate a window.
+assert pixel(overlap,290,210)==bytes((170,80,40)), 'wrong application on top'
+measurement=re.search(r'\[REDRAW9\] full pixels=(\d+) calls=(\d+) partial pixels=(\d+) calls=(\d+) frames=8',log)
+assert measurement, 'redraw measurement missing'
+fp,fc,pp,pc=map(int,measurement.groups())
+assert fp==w*(h-40)*8 and pp==8*8*8 and pc==8
+assert fc==((w+63)//64)*((h-40+63)//64)*8
+print('PASS: two live Ring 3 clients, hit testing, focus, keyboard isolation and activation')
+print('PASS: bounded 8x8 publication, exact partial/full image equality and two multi-client lifecycles')
+print(f'REDRAW: 8 frames; full {fp} pixels / {fc} calls; partial {pp} pixels / {pc} calls; {fp/pp:.1f}x fewer pixels')

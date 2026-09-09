@@ -100,6 +100,12 @@ assert (u.x,u.y,u.width,u.height) == (0,0,12,23)
 update(3, -1, op=2, handle=h)
 lib.surface_cleanup(2) # releasing a locked reader must not strand producer
 update(1, op=1, handle=h, width=1,height=1)
+request(1, op=2, handle=h, peer=2)
+fresh = update(2, 1, op=2, handle=h)
+assert fresh.serial > u.serial, 're-grant reused an old publication serial'
+update(2, -1, op=3, handle=h, serial=u.serial)
+update(2, op=3, handle=h, serial=fresh.serial)
+lib.surface_cleanup(2)
 lib.surface_cleanup(1)
 clean()
 print('PASS: explicit snapshot publication, bounded/coalesced damage, ACK, busy and invalid requests')

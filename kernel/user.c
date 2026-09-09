@@ -26,8 +26,8 @@ extern const unsigned char shell_code_end[];
 #define USER_CODE_ADDR   0x800000ULL
 #define INIT_PHYS        0x800000ULL
 
-/* Maximum ELF file size we can load (16 KB) */
-#define ELF_BUF_SIZE 16384
+/* Bounded ELF file buffer; the multi-client compositor is larger than 16 KB. */
+#define ELF_BUF_SIZE 32768
 
 /* User zone boundaries — segments must fall within [USER_ZONE_START, USER_ZONE_END).
  * This covers the PD entries that create_user_pml4 zeroes for dynamic mapping:

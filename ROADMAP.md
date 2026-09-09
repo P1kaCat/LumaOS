@@ -417,7 +417,12 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
   and shell restoration validated locally + Ubuntu CI on `e19897f`:
   [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34342600948),
   23/23 on both profiles, free pages 7584 == 7584 / 7588 == 7588.
-- [ ] Client surface updates/damage notifications and focused input routing
+- [x] Explicit surface publication and bounded damage/ACK protocol (local tests PASS)
+- [x] Partial redraw, bounded dirty regions and exact full-frame reference comparison
+- [x] Ring 3 hit testing, activation/z-order and focused client input routing
+- [x] Two live Ring 3 applications with isolated surfaces and event queues
+- [x] Full/partial redraw work counters (pixels and presentation calls; no FPS claim)
+  Local QEMU 23/23 and clean lifecycle pages; final run-profile/Ubuntu CI pending.
 - [ ] LumaOS desktop
 
 ---
