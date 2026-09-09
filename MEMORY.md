@@ -26,13 +26,25 @@ Validation locale après nettoyage : renderer, input, surfaces, routage et
 aucune touche après clic sur le fond, transfert à la fenêtre visible,
 activation/recouvrement, mise à jour exacte de 64 pixels, égalité d'image
 partielle/complète et deux cycles de fermeture/recréation. Profil run avec huit
-exécutions ELF : 23/23, pages 7613 == 7613. CI en attente du push.
+exécutions ELF : 23/23, pages 7613 == 7613.
+
+Code final `99f1b85` entièrement validé sous Ubuntu :
+[Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34373862946) et
+[xHCI Driver Test](https://github.com/P1kaCat/LumaOS/actions/runs/34373862999)
+PASS. Deux profils QEMU **23/23**, pages **7575 == 7575** et **7580 == 7580**.
+Tous les nouveaux scénarios et l'égalité d'image partielle/complète passent.
 
 Mesure locale au viewport 1280 × 760, huit redraws de 8 × 8 : plein écran
 7 782 400 pixels / 1 920 appels de présentation ; partiel 512 pixels / 8 appels.
 Ce sont des compteurs du travail réellement effectué (15 200× moins de pixels,
 240× moins d'appels pour ce cas), pas une mesure de temps, de FPS ni un gain
 général de performance. Les 23 attentes historiques restent inchangées.
+En CI, le viewport contient moins de pixels : plein écran **5 963 776 pixels /
+1 536 appels**, partiel **512 pixels / 8 appels**, soit 11 648× moins de pixels
+et 192× moins d'appels dans le même scénario de huit redraws. Les attentes
+du test sont calculées depuis les dimensions réelles des captures.
+Prochain bloc logique : fermeture individuelle des fenêtres et gestion du départ
+ou du crash d'un client, avant d'élargir le bureau et le protocole applicatif.
 
 ## Routage des applications — 2026-09-09
 
@@ -46,7 +58,7 @@ Le pool CR3 passe de quatre à cinq processus pour init, shell, compositeur et
 deux clients ; la limite du scheduler reste huit tâches au total.
 Tests hôte des droits, des coordonnées et des files pleines PASS ; la base
 QEMU avec rendu partiel conserve 23/23, pages 7624 == 7624.
-La validation complète multi-applications et CI est encore en cours.
+Validation complète multi-applications et CI : résultats du bloc ci-dessus.
 
 ## Checkpoint publication des surfaces — 2026-09-09
 
@@ -56,8 +68,9 @@ la copie jusqu'à ACK(serial). COMMIT retourne -2 pendant cette lecture.
 Grant conserve le comportement précédent en publiant une première image complète.
 Tests hôte : rollback draft/copie, isolation, rectangles invalides, fusion,
 snapshot inchangé sans commit, ACK invalide et déverrouillage à la fermeture PASS.
-Tests Ring 3 et QEMU PASS, 23/23 historiques, pages 7619 == 7619. CI à venir
-à la fin du bloc multi-applications.
+Tests Ring 3 et QEMU PASS, 23/23 historiques, pages 7619 == 7619. CI du bloc
+multi-applications PASS ci-dessus ; les numéros de publication restent monotones
+au repartage, empêchant la réutilisation d'un ancien ACK.
 
 ## Validation manuelle rapportée par l'utilisateur — 2026-09-09
 
