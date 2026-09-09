@@ -408,13 +408,15 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
 - [x] Phase 9.7: isolated Ring 3 surface presentation and exclusive presenter
   (ABI v2; bounds/pointer checks, second-process rejection, 23/23 Ubuntu CI
   on `640a543`: [validation](https://github.com/P1kaCat/LumaOS/actions/runs/34234501512)).
-- [x] Ring 3 keyboard/mouse event interface (local QEMU + bounded queue tests PASS; CI pending)
-- [x] Inter-process surface sharing for application windows (bounded RW/RO views, local QEMU PASS; CI pending)
+- [x] Ring 3 keyboard/mouse event interface (local + Ubuntu QEMU and bounded queue tests PASS)
+- [x] Inter-process surface sharing for application windows (bounded RW/RO views, local + Ubuntu QEMU PASS)
 - [x] Minimal window foundations: position, dimensions, visibility and stacking
-  in Ring 3; two-window demo, drag and occlusion tested in QEMU (CI pending).
+  in Ring 3; two-window demo, drag and occlusion tested in local + Ubuntu QEMU.
 - [x] Isolated userspace compositor foundations (user-approved architecture):
   shared read-only client pixels, tiled ABI v2 presentation, two clean lifecycles
-  and shell restoration validated locally (CI pending).
+  and shell restoration validated locally + Ubuntu CI on `e19897f`:
+  [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34342600948),
+  23/23 on both profiles, free pages 7584 == 7584 / 7588 == 7588.
 - [ ] Client surface updates/damage notifications and focused input routing
 - [ ] LumaOS desktop
 

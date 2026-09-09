@@ -26,7 +26,13 @@
   handles, deux ordres de terminaison, écriture RO tuant uniquement l'utilisateur,
   déplacement/recouvrement/visibilité vérifiés par captures et deux cycles du
   compositeur. Profil run + huit exécutions ELF : **23/23**, pages **7637 == 7637**.
-  CI en attente du push de ce bloc.
+- Validation Ubuntu CI du code final `e19897f` :
+  [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/34342600948) et
+  [xHCI Driver Test](https://github.com/P1kaCat/LumaOS/actions/runs/34342600947)
+  **PASS**. Deux profils QEMU **23/23**, pages **7584 == 7584** et
+  **7588 == 7588** avec huit exécutions ELF. Tous les nouveaux tests input,
+  surfaces, faute d'écriture RO et compositeur passent aussi sous Ubuntu.
+  Bloc Input Ring 3 + fondations du compositeur entièrement validé.
 - Limites volontaires : un présentateur, un destinataire RO par surface,
   dimensions immuables, quatre processus simultanés, deux fenêtres de démonstration.
   Pas encore de protocole de commit des pixels, de notifications de dommages,
