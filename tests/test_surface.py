@@ -153,3 +153,33 @@ route(2,2,h1,-1,key)
 for pid in (1,2,3): lib.surface_cleanup(pid)
 clean()
 print('PASS: per-client input isolation, focus, coordinate bounds and atomic queue-pressure handling')
+
+# Closing is a notification, not revocation. Death while the reader holds a
+# snapshot must preserve that snapshot until the reader releases its view.
+for cycle in range(64):
+    h = request(1, op=1, width=128, height=80).handle
+    request(1, op=2, handle=h, peer=2)
+    route(1,4,h,-1)
+    route(3,4,h,-1)
+    route(2,4,h,0)
+    assert route(1,1,h,1).type == 5
+    request(1,op=3,handle=h) # request did not destroy producer
+    route(2,3,h)
+    u=update(2,1,op=2,handle=h)
+    route(1,5,h,-1)
+    route(3,5,h,-1)
+    if cycle%2: route(2,5,h)
+    else: lib.surface_cleanup(1)
+    route(2,5,h,-1)
+    route(2,2,h,-1,key) # no input to dead owner
+    route(2,4,h,-1)
+    assert request(2,op=3,handle=h).peer == 0
+    update(2,op=3,handle=h,serial=u.serial)
+    request(2,op=4,handle=h)
+    request(2,-1,op=4,handle=h)
+    fresh=request(1,op=1,width=1,height=1).handle
+    request(1,-1,op=3,handle=h)
+    route(2,4,h,-1)
+    request(1,op=4,handle=fresh)
+    clean()
+print('PASS: 64 close/death cycles, locked snapshot lifetime, dead input, double close and stale generation; zero pages')

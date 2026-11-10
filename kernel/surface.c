@@ -159,6 +159,16 @@ int surface_route(struct lumaos_route *r, int pid) {
         r->event = s->events[s->first];
         s->first = (s->first+1) % LUMAOS_CLIENT_QUEUE; --s->used; return 1;
     }
+    if (r->op == LUMAOS_ROUTE_TERMINATE) {
+        if (s->reader != pid || !s->owner || !graphics_is_owner(pid) || !empty_event(&r->event)) return -1;
+        proc_terminate(s->owner);return 0;
+    }
+    if (r->op == LUMAOS_ROUTE_CLOSE_REQUEST) {
+        if (s->reader != pid || !s->owner || !graphics_is_owner(pid) || !empty_event(&r->event)) return -1;
+        if (s->used == LUMAOS_CLIENT_QUEUE) return -2;
+        enqueue(s, (struct lumaos_input_event){.type=LUMAOS_INPUT_CLOSE_REQUEST});
+        return 0;
+    }
     if (r->op != LUMAOS_ROUTE_SEND || s->reader != pid || !s->owner || !graphics_is_owner(pid)) return -1;
     struct lumaos_input_event *e = &r->event;
     if (e->type == LUMAOS_INPUT_KEY) {

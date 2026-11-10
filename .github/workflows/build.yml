@@ -58,7 +58,7 @@ jobs:
   qemu-test:
     name: QEMU Boot Test
     runs-on: ubuntu-22.04
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 

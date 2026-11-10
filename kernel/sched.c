@@ -121,7 +121,12 @@ struct task *proc_find_user(int pid) {
 
 void proc_terminate(int pid) {
     for (int i = 0; i < num_tasks; i++) {
-        if (tasks[i].pid == pid && tasks[i].is_user) {
+        if (tasks[i].pid == pid && tasks[i].is_user && tasks[i].state != PROC_TERMINATED) {
+            /* A syscall may have selected this task before the next IRQ. */
+            if (sched_switch_pending && sched_next == &tasks[i]) {
+                sched_switch_pending = 0;
+                sched_next = sched_current;
+            }
             surface_cleanup(pid);
             graphics_task_exit(pid);
             tasks[i].state = PROC_TERMINATED;

@@ -31,7 +31,7 @@ void _start(void) {
     check(call3(20,(uintptr_t)_start,sizeof(q),0)==-1);
     check(call3(20,0xbffff8,sizeof(q),0)==-1);
     say(TAG "ready; isolation checks passed\n");
-    int focused=0, pending=0;
+    int focused=0, pending=0, ignore_close=0;
     unsigned changes=0;
     for (;;) {
         if (pending) {
@@ -45,12 +45,25 @@ void _start(void) {
         if (result==-1) { say(TAG "presenter gone; exit\n"); done(0); }
         check(result==0 || result==1);
         if (result==1) {
+            if (q.event.type==LUMAOS_INPUT_CLOSE_REQUEST) {
+                if (ignore_close) { say(TAG "close request ignored\n");continue; }
+                say(TAG "close request; destroy\n");
+                r=(struct lumaos_surface_request){.op=4,.handle=handle};
+                check(call3(18,(uintptr_t)&r,0,0)==0);
+                r=(struct lumaos_surface_request){.op=4,.handle=handle};
+                check(call3(18,(uintptr_t)&r,0,0)==-1);
+                say(TAG "double destroy rejected\n");done(0);
+            }
             if (q.event.type==LUMAOS_INPUT_FOCUS) {
                 focused=q.event.value!=0;
                 say(focused ? TAG "focus gained\n" : TAG "focus lost\n");
             }
             if (q.event.type==LUMAOS_INPUT_KEY && (q.event.flags&LUMAOS_INPUT_DOWN)) {
                 check(focused);
+                if (q.event.value=='i') ignore_close=1;
+                if (q.event.value=='q') { say(TAG "normal exit\n");done(0); }
+                if (q.event.value=='k') { say(TAG "crash probe\n");__asm__ volatile("ud2"); }
+
                 for (unsigned slot=0;slot<4;slot++) if (slot!=(handle&3)) {
                     r=(struct lumaos_surface_request){.op=LUMAOS_SURFACE_ENUM,.index=slot};
                     check(call3(18,(uintptr_t)&r,0,0)==-1);

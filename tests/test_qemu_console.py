@@ -195,6 +195,26 @@ for cycle in range(2):
     wait_count('[CLIENT9 B] presenter gone; exit',cycle+1)
 """
 
+extra += r"""
+Path('build/lifecycle-baseline.log').write_text(Path('build/console-serial.log').read_text(errors='replace'))
+for cycle, action in enumerate(('c','q','k','i') * 2):
+    for key in list('run multi.elf') + ['ret']:
+        send_key({' ': 'spc', '.': 'dot', 'm': 'semicolon'}.get(key,key))
+    wait_count('[MULTI9] ready: two live applications',cycle+3)
+    send_key("a" if action=="q" else action) # AZERTY Q is physical A
+    if action=='i':
+        send_key('c')
+        wait_count('[CLIENT9 B] close request ignored',cycle//4+1)
+        send_key('c')
+    wait_count('[LIFE9] dead window removed; damage queued',cycle*2+1)
+    send_key('h')
+    wait_count('[CLIENT9 A] key h',cycle+3)
+    send_key('c')
+    wait_count('[LIFE9] dead window removed; damage queued',cycle*2+2)
+    send_key('x')
+    wait_count('[MULTI9] closed',cycle+3)
+"""
+
 harness = harness.replace('# Type "exit" + Enter', extra + '\n# Type "exit" + Enter')
 
 serial = Path('build/console-serial.log')
@@ -354,16 +374,22 @@ print('PASS: isolated Ring 3 compositor, shared pixels, drag, z-order, visibilit
 assert re.search(r'\[SURFACE9\] read-only write probe\n[\s\S]*?Page fault in Ring 3 \(CR2=0x3FE00000\)[\s\S]*?terminated \(page fault\)', log, re.IGNORECASE), 'read-only user store did not fault'
 print('PASS: direct write to read-only shared view faults in Ring 3; kernel and shell survive')
 
+historical=Path('build/lifecycle-baseline.log').read_text()
+assert log.count('[LIFE9] dead window removed; damage queued') == 16
+assert log.count('[LIFE9] client pages restored') == 8
+assert log.count('[LIFE9] Ring 3 exception; client terminated') == 2
+assert log.count('double destroy rejected') == 10
+print('PASS: 8 two-client lifecycle cycles; cooperative close, normal exit, UD2 crash, surviving input and automatic cleanup')
 assert '[MULTI9] ready: two live applications' in log
 assert 'FAILED' not in '\n'.join(line for line in log.splitlines() if '[CLIENT9' in line)
-assert log.count('[CLIENT9 A] key h') == 2
-assert log.count('[CLIENT9 B] key h') == 0
-assert log.count('[CLIENT9 A] key j') == 1
-assert log.count('[CLIENT9 B] key j') == 1
-assert log.count('[CLIENT9 A] pointer down') == 2
-assert log.count('[CLIENT9 B] pointer down') == 1
+assert historical.count('[CLIENT9 A] key h') == 2
+assert historical.count('[CLIENT9 B] key h') == 0
+assert historical.count('[CLIENT9 A] key j') == 1
+assert historical.count('[CLIENT9 B] key j') == 1
+assert historical.count('[CLIENT9 A] pointer down') == 2
+assert historical.count('[CLIENT9 B] pointer down') == 1
 for client in ('A','B'):
-    assert log.count(f'[CLIENT9 {client}] presenter gone; exit') == 2
+    assert historical.count(f'[CLIENT9 {client}] presenter gone; exit') == 2
 mbw,mbh,mbefore=ppm('build/multi-before.ppm')
 maw,mah,mafter=ppm('build/multi-after.ppm')
 mfw,mfh,mfull=ppm('build/multi-full.ppm')

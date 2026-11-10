@@ -9,6 +9,7 @@
 struct window {
     int x, y, visible;
     unsigned width, height, handle;
+    unsigned closing;
     uint32_t *pixels;
     const uint32_t *view;
 };
@@ -62,7 +63,7 @@ static void render(void) {
 static void updates(void) {
     for (unsigned n=0;n<2;n++) {
         struct window *w=&windows[n];
-        if (n && w->handle==windows[0].handle) continue;
+        if (!w->handle || (n && w->handle==windows[0].handle)) continue;
         struct lumaos_surface_update u={.op=2,.handle=w->handle};
         long result=call3(19,(uintptr_t)&u,sizeof(u),0);
         check(result==0 || result==1);
@@ -87,11 +88,30 @@ static long route(unsigned op, unsigned handle, struct lumaos_input_event e) {
     return result;
 }
 static void focus(unsigned handle) {
-    check(route(LUMAOS_ROUTE_FOCUS,handle,(struct lumaos_input_event){0})==0);
-    focus_handle=handle;
+    if (route(LUMAOS_ROUTE_FOCUS,handle,(struct lumaos_input_event){0})==0) focus_handle=handle;
 }
 static void send(unsigned handle, struct lumaos_input_event e) {
-    check(route(LUMAOS_ROUTE_SEND,handle,e)==0);
+    (void)route(LUMAOS_ROUTE_SEND,handle,e); /* owner may exit between input polls */
+}
+/* Reader mappings remain valid until this process releases them. This avoids
+ * unmapping a published snapshot while the compositor copies its pixels. */
+static int reconcile(void) {
+    int removed=0;
+    if (!MULTI) return 0;
+    for (unsigned n=0;n<2;n++) {
+        struct window *w=&windows[n];
+        if (!w->handle) continue;
+        struct lumaos_surface_request r={.op=3,.handle=w->handle};
+        long result=call3(18,(uintptr_t)&r,0,0);
+        if (!result && r.peer) continue;
+        invalidate(w);
+        r=(struct lumaos_surface_request){.op=4,.handle=w->handle};
+        check(call3(18,(uintptr_t)&r,0,0)==0);
+        w->handle=0;w->visible=0;removed=1;
+        say("[LIFE9] dead window removed; damage queued\n");
+    }
+    if (removed) focus(windows[1].visible?windows[1].handle:windows[0].visible?windows[0].handle:0);
+    return removed;
 }
 static char *text(char *p, const char *s) { while (*s) *p++=*s++; return p; }
 static char *number(char *p, uint64_t n) {
@@ -118,6 +138,8 @@ void _start(void) {
     damage.width=info.width; damage.height=info.height;
     check(call3(14,0,0,0)==0);
     check(call3(17,(uintptr_t)events,LUMAOS_INPUT_BATCH,0)>=0);
+    long baseline_pages=call3(7,0,0,0);
+    int reported_pages=0;
     long producers[2]={0,0};
     producers[0]=call3(12,(uintptr_t)(MULTI?"appa.elf":"paint.elf"),0,0);
     check(producers[0]>0);
@@ -136,7 +158,7 @@ void _start(void) {
         }
         check(r.width==128 && r.height==80);
         check(call3(17,r.address,1,0)==-1);
-        windows[n]=(struct window){n?260:80,n?150:70,1,r.width,r.height,r.handle,cache[n],(const uint32_t *)(uintptr_t)r.address};
+        windows[n]=(struct window){n?260:80,n?150:70,1,r.width,r.height,r.handle,0,cache[n],(const uint32_t *)(uintptr_t)r.address};
     }
     if (!MULTI) { windows[1]=windows[0];windows[1].x=260;windows[1].y=150; }
     updates();
@@ -146,19 +168,31 @@ void _start(void) {
     int dragging=0,offset_x=0,offset_y=0,was_down=0;
     unsigned capture=0;
     for (;;) {
+        if (reconcile()) { dragging=0;capture=0; }
         long count=call3(17,(uintptr_t)events,LUMAOS_INPUT_BATCH,0);check(count>=0);
         for (long i=0;i<count;i++) {
             struct lumaos_input_event e=events[i];
             if (e.type==LUMAOS_INPUT_OVERFLOW) { dragging=0;capture=0;was_down=(e.code&1)!=0;focus(0);continue; }
             if (e.type==LUMAOS_INPUT_KEY) {
-                if (e.value=='v' && (e.flags&LUMAOS_INPUT_DOWN)) {
-                    invalidate(&windows[1]);windows[1].visible=!windows[1].visible;invalidate(&windows[1]);
+                if (MULTI && e.value=='c' && (e.flags&LUMAOS_INPUT_DOWN)) {
+                    for (unsigned n=0;n<2;n++) if (windows[n].handle==focus_handle && focus_handle) {
+                        if (!windows[n].closing) {
+                            if (!route(LUMAOS_ROUTE_CLOSE_REQUEST,focus_handle,(struct lumaos_input_event){0})) windows[n].closing=1;
+                        } else {
+                            /* A second explicit request terminates only this granted producer. */
+                            check(route(LUMAOS_ROUTE_TERMINATE,focus_handle,(struct lumaos_input_event){0})==0);
+                            dragging=0;capture=0;
+                        }
+                        break;
+                    }
+                } else if (e.value=='v'  && (e.flags&LUMAOS_INPUT_DOWN)) {
+                    invalidate(&windows[1]);windows[1].visible=windows[1].handle && !windows[1].visible;invalidate(&windows[1]);
                     dragging=0;capture=0;focus(windows[1].visible?windows[1].handle:windows[0].visible?windows[0].handle:0);
                     say(windows[1].visible?"[DESKTOP9] shown\n":"[DESKTOP9] hidden\n");
                 } else if (e.value=='x' && (e.flags&LUMAOS_INPUT_DOWN)) {
                     focus(0);
                     for (unsigned n=0;n<2;n++) {
-                        if (n && windows[n].handle==windows[0].handle) continue;
+                        if (!windows[n].handle || (n && windows[n].handle==windows[0].handle)) continue;
                         struct lumaos_surface_request r={.op=4,.handle=windows[n].handle};
                         check(call3(18,(uintptr_t)&r,0,0)==0);
                     }
@@ -167,7 +201,7 @@ void _start(void) {
                 } else if (e.value=='f' && (e.flags&LUMAOS_INPUT_DOWN)) {
                     render_rect((struct rect){0,0,info.width,info.height});say("[REDRAW9] reference full frame\n");
                 } else if (e.value=='b' && (e.flags&LUMAOS_INPUT_DOWN)) benchmark();
-                else if (MULTI && focus_handle && e.value!='v' && e.value!='x' && e.value!='f' && e.value!='b') send(focus_handle,e);
+                else if (MULTI && focus_handle && e.value!='v' && e.value!='x' && e.value!='f' && e.value!='b' && e.value!='c') send(focus_handle,e);
             }
             if (e.type!=LUMAOS_INPUT_POINTER) continue;
             int down=(e.code&1)!=0;
@@ -206,6 +240,11 @@ void _start(void) {
             if (!down && dragging) {dragging=0;say("[DESKTOP9] moved\n");}
             if (!down) capture=0;
             was_down=down;
+        }
+        if (reconcile()) { dragging=0;capture=0; }
+        if (MULTI && !windows[0].handle && !windows[1].handle && !reported_pages) {
+            check(call3(7,0,0,0)==baseline_pages);
+            say("[LIFE9] client pages restored\n");reported_pages=1;
         }
         updates();render();sleep_ticks(1);
     }

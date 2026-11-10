@@ -426,7 +426,12 @@ Commits: `828e808` (ATA+FAT32+VFS+cat), `c4fe2c2` (ELF64 loader + syscall 12), `
   [CI](https://github.com/P1kaCat/LumaOS/actions/runs/34373862946): pages
   7575 == 7575 / 7580 == 7580; 512 partial pixels versus 5963776 full pixels
   for eight 8x8 redraws, exact full/partial image equality.
-- [ ] Individual window closure and client disconnect/crash handling
+- [x] Individual window closure and client disconnect/crash handling (local validation)
+  CLOSE_REQUEST / explicit second-close termination, highest-visible focus fallback,
+  bounded destruction damage, safe retained reader snapshots and generation checks.
+  64 registry stress cycles + 8 two-client cycles per QEMU profile; 23/23 on both,
+  pages 7624 == 7624 / 7628 == 7628. CI validation follows the pushed commit.
+- [ ] Controlled window/surface resizing
 - [ ] LumaOS desktop
 
 ---

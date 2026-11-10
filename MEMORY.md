@@ -1,5 +1,44 @@
 # MEMORY.md — LumaOS
 
+## Cycle de vie des fenetres — 2026-11-10
+
+Le compositeur Ring 3 existant retire les fenetres dont le producteur a disparu,
+invalide leur ancien rectangle et transfere le focus a la plus haute fenetre
+visible restante, ou a aucune. Les vues publiees restent valides jusqu'a leur
+liberation par le lecteur : un client mort pendant un DAMAGE/ACK ne provoque
+pas d'unmapping sous le compositeur. Le cache prive et les handles generationnels
+existants sont conserves. Le desktop historique conserve ses snapshots statiques.
+
+Dans multi.elf : C demande CLOSE_REQUEST a l'application focalisee ; un second C
+termine uniquement ce producteur accorde si la demande est ignoree. Les clients
+de demonstration utilisent Q pour une sortie normale, K pour UD2 et I pour
+ignorer la demande. X ferme toujours le compositeur. Une exception Ring 3 est
+confinee au client ; les exceptions kernel conservent leur traitement existant.
+L'ordonnanceur annule un changement de contexte en attente vers un client tue.
+
+Validation locale apres make clean + build complet : tous les tests hotes PASS,
+64 cycles de registre avec zero page/mapping restant ; QEMU ci 23/23 et pages
+7624 == 7624 ; profil run avec 8 executions ELF 23/23 et pages 7628 == 7628.
+Chaque profil exerce 8 cycles a deux clients (fermeture cooperative, sortie
+normale, UD2, demande ignoree puis terminaison), soit 16 cycles QEMU au total.
+Chaque cycle verifie la recuperation des pages des clients avant de quitter le
+compositeur. Les tests couvrent double fermeture, ancien handle, autorisations,
+entrees vers un proprietaire mort et snapshot verrouille lors de sa disparition.
+L'autre client recoit toujours le clavier apres chaque disparition.
+
+La destruction invalide le rectangle de la fenetre (128x96 pour cette demo) et
+utilise le damage tracking existant. Le benchmark existant conserve 512 pixels /
+8 presents partiels contre 7782400 pixels / 1920 presents complets ; egalite
+exacte avec l'image de reference. Ce compteur mesure le travail, pas les FPS.
+Aucune nouvelle validation manuelle n'est revendiquee.
+
+Environnement restaure hors depot : LLVM 23.1.5 et QEMU 11.1.0 portables dans
+LOCALAPPDATA/LumaOS-toolchain, ajoutes au PATH utilisateur. Les anciennes entrees
+Program Files ne correspondaient plus a des installations presentes. Chocolatey
+avait echoue sur les droits/verrous ProgramData. fix_kernel.py reste intact,
+local et non suivi. La duree CI passe de 8 a 15 minutes pour les deux suites
+QEMU maintenant etendues ; aucun marqueur historique n'a ete retire ou assoupli.
+
 ## Bloc multi-applications et rendu partiel — 2026-09-09
 
 Le compositeur existant est conservé : `desktop.elf` exerce le producteur

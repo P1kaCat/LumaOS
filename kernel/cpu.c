@@ -719,6 +719,12 @@ void isr_handler(struct registers *regs) {
             for (;;) __asm__ volatile ("hlt");
         }
 
+        if ((regs->cs & 3) == 3) {
+            serial_puts("[LIFE9] Ring 3 exception; client terminated\n");
+            proc_terminate(proc_current_pid());
+            __asm__ volatile ("sti");
+            for (;;) __asm__ volatile ("hlt");
+        }
         exception_handler(regs->int_no, regs->err_code);
     }
     else if (regs->int_no == 128)

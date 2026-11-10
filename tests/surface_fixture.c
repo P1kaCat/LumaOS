@@ -67,3 +67,5 @@ int unmap_page(uint64_t cr3, uint64_t va) {
     return 0;
 }
 void reclaim_empty_pt(uint64_t cr3, uint64_t va) { (void)cr3; (void)va; }
+
+void proc_terminate(int pid) { surface_cleanup(pid); }
