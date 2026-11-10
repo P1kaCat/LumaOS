@@ -197,18 +197,23 @@ for cycle in range(2):
 
 extra += r"""
 Path('build/lifecycle-baseline.log').write_text(Path('build/console-serial.log').read_text(errors='replace'))
-for cycle, action in enumerate(('c','q','k','i') * 2):
+for cycle, action in enumerate(('c','q','k','i','u') * 2):
     for key in list('run multi.elf') + ['ret']:
         send_key({' ': 'spc', '.': 'dot', 'm': 'semicolon'}.get(key,key))
     wait_count('[MULTI9] ready: two live applications',cycle+3)
     send_key("a" if action=="q" else action) # AZERTY Q is physical A
+    if action=='u':
+        wait_count('[CLIENT9 B] input frozen',cycle//5+1)
+        for _ in range(18): send_key('h')
+        wait_count('[LIFE9] saturated client terminated',cycle//5+1)
     if action=='i':
         send_key('c')
-        wait_count('[CLIENT9 B] close request ignored',cycle//4+1)
+        wait_count('[CLIENT9 B] close request ignored',cycle//5+1)
         send_key('c')
     wait_count('[LIFE9] dead window removed; damage queued',cycle*2+1)
+    received=Path('build/console-serial.log').read_text(errors='replace').count('[CLIENT9 A] key h')
     send_key('h')
-    wait_count('[CLIENT9 A] key h',cycle+3)
+    wait_count('[CLIENT9 A] key h',received+1)
     send_key('c')
     wait_count('[LIFE9] dead window removed; damage queued',cycle*2+2)
     send_key('x')
@@ -375,11 +380,11 @@ assert re.search(r'\[SURFACE9\] read-only write probe\n[\s\S]*?Page fault in Rin
 print('PASS: direct write to read-only shared view faults in Ring 3; kernel and shell survive')
 
 historical=Path('build/lifecycle-baseline.log').read_text()
-assert log.count('[LIFE9] dead window removed; damage queued') == 16
-assert log.count('[LIFE9] client pages restored') == 8
+assert log.count('[LIFE9] dead window removed; damage queued') == 20
+assert log.count('[LIFE9] client pages restored') == 10
 assert log.count('[LIFE9] Ring 3 exception; client terminated') == 2
-assert log.count('double destroy rejected') == 10
-print('PASS: 8 two-client lifecycle cycles; cooperative close, normal exit, UD2 crash, surviving input and automatic cleanup')
+assert log.count('double destroy rejected') == 12
+print('PASS: 10 two-client lifecycle cycles; cooperative close, normal exit, UD2 crash, surviving input and automatic cleanup')
 assert '[MULTI9] ready: two live applications' in log
 assert 'FAILED' not in '\n'.join(line for line in log.splitlines() if '[CLIENT9' in line)
 assert historical.count('[CLIENT9 A] key h') == 2

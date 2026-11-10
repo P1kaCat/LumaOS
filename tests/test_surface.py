@@ -141,6 +141,7 @@ assert route(1,1,h1,1).value == 0
 assert route(3,1,h2,1).value == 1
 for _ in range(32): route(2,2,h2,0,key)
 route(2,2,h2,-2,key)
+route(2,4,h2,-2) # close notification respects bounded FIFO pressure
 route(2,3,h1,-2) # full old queue: focus change is atomic
 route(1,1,h1,0)
 for _ in range(32): assert route(3,1,h2,1).value == 104

@@ -18,9 +18,9 @@ L'ordonnanceur annule un changement de contexte en attente vers un client tue.
 
 Validation locale apres make clean + build complet : tous les tests hotes PASS,
 64 cycles de registre avec zero page/mapping restant ; QEMU ci 23/23 et pages
-7624 == 7624 ; profil run avec 8 executions ELF 23/23 et pages 7628 == 7628.
-Chaque profil exerce 8 cycles a deux clients (fermeture cooperative, sortie
-normale, UD2, demande ignoree puis terminaison), soit 16 cycles QEMU au total.
+7611 == 7611 ; profil run avec 8 executions ELF 23/23 et pages 7628 == 7628.
+Chaque profil exerce 10 cycles a deux clients (fermeture cooperative, sortie
+normale, UD2, demande ignoree puis terminaison), soit 20 cycles QEMU au total.
 Chaque cycle verifie la recuperation des pages des clients avant de quitter le
 compositeur. Les tests couvrent double fermeture, ancien handle, autorisations,
 entrees vers un proprietaire mort et snapshot verrouille lors de sa disparition.
@@ -38,6 +38,15 @@ Program Files ne correspondaient plus a des installations presentes. Chocolatey
 avait echoue sur les droits/verrous ProgramData. fix_kernel.py reste intact,
 local et non suivi. La duree CI passe de 8 a 15 minutes pour les deux suites
 QEMU maintenant etendues ; aucun marqueur historique n'a ete retire ou assoupli.
+
+CI du premier checkpoint `6e2bcda` : [Build & Test](https://github.com/P1kaCat/LumaOS/actions/runs/42895819750)
+et [xHCI](https://github.com/P1kaCat/LumaOS/actions/runs/42895819471) PASS,
+23/23 sur les deux profils Ubuntu, pages 7576 == 7576 / 7580 == 7580.
+Le dernier checkpoint ajoute les queues saturees et porte les scenarios a dix
+cycles par profil. Sa suite CI verifie aussi ces attentes supplementaires.
+Aucune attente historique n'est assouplie. Le prochain bloc est le
+redimensionnement controle des fenetres et surfaces ; le bureau complet reste
+en developpement.
 
 ## Bloc multi-applications et rendu partiel — 2026-09-09
 

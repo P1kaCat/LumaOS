@@ -80,18 +80,24 @@ static void updates(void) {
 static long route(unsigned op, unsigned handle, struct lumaos_input_event e) {
     if (!MULTI) return 0;
     long result;
+    unsigned retries=0;
     do {
         struct lumaos_route r={.op=op,.handle=handle,.event=e};
         result=call3(20,(uintptr_t)&r,sizeof(r),0);
         if (result==-2) sleep_ticks(1); /* explicit backpressure, no dropped transitions */
-    } while (result==-2);
+    } while (result==-2 && ++retries<8);
     return result;
 }
 static void focus(unsigned handle) {
     if (route(LUMAOS_ROUTE_FOCUS,handle,(struct lumaos_input_event){0})==0) focus_handle=handle;
 }
 static void send(unsigned handle, struct lumaos_input_event e) {
-    (void)route(LUMAOS_ROUTE_SEND,handle,e); /* owner may exit between input polls */
+    long result=route(LUMAOS_ROUTE_SEND,handle,e);
+    if (result==-2) {
+        /* A non-consuming client must not freeze the compositor on a full FIFO. */
+        (void)route(LUMAOS_ROUTE_TERMINATE,handle,(struct lumaos_input_event){0});
+        say("[LIFE9] saturated client terminated\n");
+    } /* -1 is possible when the owner exits between input polls. */
 }
 /* Reader mappings remain valid until this process releases them. This avoids
  * unmapping a published snapshot while the compositor copies its pixels. */
@@ -177,10 +183,11 @@ void _start(void) {
                 if (MULTI && e.value=='c' && (e.flags&LUMAOS_INPUT_DOWN)) {
                     for (unsigned n=0;n<2;n++) if (windows[n].handle==focus_handle && focus_handle) {
                         if (!windows[n].closing) {
-                            if (!route(LUMAOS_ROUTE_CLOSE_REQUEST,focus_handle,(struct lumaos_input_event){0})) windows[n].closing=1;
+                            long result=route(LUMAOS_ROUTE_CLOSE_REQUEST,focus_handle,(struct lumaos_input_event){0});
+                            if (result==0 || result==-2) windows[n].closing=1;
                         } else {
                             /* A second explicit request terminates only this granted producer. */
-                            check(route(LUMAOS_ROUTE_TERMINATE,focus_handle,(struct lumaos_input_event){0})==0);
+                            (void)route(LUMAOS_ROUTE_TERMINATE,focus_handle,(struct lumaos_input_event){0}); /* may already have exited */
                             dragging=0;capture=0;
                         }
                         break;

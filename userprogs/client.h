@@ -31,9 +31,10 @@ void _start(void) {
     check(call3(20,(uintptr_t)_start,sizeof(q),0)==-1);
     check(call3(20,0xbffff8,sizeof(q),0)==-1);
     say(TAG "ready; isolation checks passed\n");
-    int focused=0, pending=0, ignore_close=0;
+    int focused=0, pending=0, ignore_close=0, frozen=0;
     unsigned changes=0;
     for (;;) {
+        if (frozen) { sleep_ticks(1);continue; }
         if (pending) {
             struct lumaos_surface_update u={.op=1,.handle=handle,.width=8,.height=8};
             long result=call3(19,(uintptr_t)&u,sizeof(u),0);
@@ -60,6 +61,7 @@ void _start(void) {
             }
             if (q.event.type==LUMAOS_INPUT_KEY && (q.event.flags&LUMAOS_INPUT_DOWN)) {
                 check(focused);
+                if (q.event.value=='u') { frozen=1;say(TAG "input frozen\n"); }
                 if (q.event.value=='i') ignore_close=1;
                 if (q.event.value=='q') { say(TAG "normal exit\n");done(0); }
                 if (q.event.value=='k') { say(TAG "crash probe\n");__asm__ volatile("ud2"); }
